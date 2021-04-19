@@ -1,5 +1,5 @@
 from matplotlib import pylab as plt
-from graphing.multitab import MplMultiTab
+from scrawl.multitab import MplMultiTab
 import numpy as np
 
 fig, ax = plt.subplots()
@@ -9,7 +9,7 @@ fig2, ax2 = plt.subplots()
 ax2.plot(np.random.randn(100, 2), 'bx')
 
 ui = MplMultiTab(None, [fig], [])
-ui.show()
+# ui.show()
 
 
 import numpy as np
@@ -25,7 +25,7 @@ for i in range(3):
 
 # app = QtWidgets.QApplication(sys.argv)
 ui = MplMultiTab(figures=figures, labels=labels)
-ui.show()
+# ui.show()
 # from IPython import embed
 # embed()
 # sys.exit(app.exec_())
