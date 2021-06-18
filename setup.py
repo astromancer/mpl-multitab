@@ -1,3 +1,6 @@
+"""
+Universal build script for python project git repos
+"""
 
 # std libs
 import os
