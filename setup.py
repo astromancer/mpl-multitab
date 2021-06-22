@@ -30,7 +30,8 @@ untracked = re.findall(r'\?\? (.+)', status)
 
 
 class GitIgnore:
-    # exclude gitignored files from build archive
+    """exclude gitignored files from build archive"""
+
     def __init__(self, path='.gitignore'):
         self.names = self.patterns = ()
         path = Path(path)
@@ -43,7 +44,7 @@ class GitIgnore:
         items = names, patterns = [], []
         for line in filter(None, lines):
             items[glob.has_magic(line)].append(line)
-        
+
         self.names = tuple(names)
         self.patterns = tuple(patterns)
 
@@ -52,9 +53,6 @@ class GitIgnore:
             if fnmatch.fnmatchcase(filename, pattern):
                 return True
         return filename.endswith(self.names)
-
-
-gitignore = GitIgnore()
 
 
 class Builder(build_py):
@@ -96,8 +94,10 @@ class CleanCommand(Command):
         os.system('rm -vrf ./build ./dist ./*.pyc ./*.tgz ./src/*.egg-info')
 
 
+gitignore = GitIgnore()
+
 setup(
-    packages=find_packages(exclude=['tests']),
+    packages=find_packages(exclude=['tests', "tests.*"]),
     use_scm_version=True,
     include_package_data=True,
     exclude_package_data={'': [*gitignore.patterns, *gitignore.names]},
