@@ -148,7 +148,9 @@ disable=print-statement,
         too-many-arguments,
         too-many-lines,
         too-many-ancestors,
-        inconsistent-return-statements
+        inconsistent-return-statements,
+        redefined-outer-name,
+        redefined-argument-from-local
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
@@ -272,7 +274,9 @@ contextmanager-decorators=contextlib.contextmanager
 generated-members=numpy.*, np.*,
                   astropy.constants.*,
                   cmasher.*, cmr.*,
-                  motley.*
+                  motley.*,
+                  obstools.image.segmentation.SegmentedImage
+                  
 
 
 # Tells whether missing members accessed in mixin class should be ignored. A
