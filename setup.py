@@ -2,7 +2,7 @@
 Universal build script for python project git repos
 """
 
-# std libs
+# std
 import os
 import re
 import sys
@@ -13,7 +13,7 @@ import subprocess as sub
 from pathlib import Path
 from distutils import debug
 
-# third-party libs
+# third-party
 from setuptools.command.build_py import build_py
 from setuptools import Command, setup, find_packages
 
