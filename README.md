@@ -17,9 +17,11 @@ in a tabbed figure manager.
 
 
 # Install
-
+Clone the repo, then run the setup.py script
 ```shell
-pip install mpl-multitab
+git clone https://github.com/astromancer/mpl-multitab.git
+cd mpl-multitab
+python setup.py
 ```
 
 # Use
