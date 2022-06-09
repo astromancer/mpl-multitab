@@ -35,7 +35,8 @@ for c in colours:
     ui.add_tab(fig, c)
 
 ui.show()
-sys.exit(app.exec_())
+if __name__ == '__main__':
+    sys.exit(app.exec_())
 
 # from IPython import embed
 # embed()
