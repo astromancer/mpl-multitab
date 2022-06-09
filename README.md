@@ -10,19 +10,24 @@ TODO
 [![GitHub](https://img.shields.io/github/license/astromancer/mpl-multitab.svg?color=blue)](https://mpl-multitab.readthedocs.io/en/latest/license.html)
  -->
 
-Ever struggle to navigate between a million open figures. I know your pain...
+Ever struggle to navigate between a myriad of open matplotlib figures? I know your pain...
 
 `mpl-multitab` is a simple application that allows you to embed mutliple figures
-in a tabbed figure manager. 
+in a tabbed figure manager, keeping everything neatly in one place.
 
 
 # Install
-Clone the repo, then run the setup.py script
+Using pip:
+```shell
+pip install mpl-multitab
+```
+Alternatively, clone the repo, then run the [`setup.py`](/setup.py) script
 ```shell
 git clone https://github.com/astromancer/mpl-multitab.git
 cd mpl-multitab
-python setup.py
+python setup.py install
 ```
+
 
 # Use
 
@@ -47,10 +52,10 @@ for c in colours:
 ui.show()
 ```
 
-![Demo GIF](/tests/demo.gif)
+![Demo GIF can be viewed at https://github.com/astromancer/mpl-multitab/blob/main/tests/demo.gif](/tests/demo.gif)
 
 
-## In a script:
+## In a script
 ```python
 import sys
 from mpl_multitab import MplMultiTab, QtWidgets
@@ -69,8 +74,30 @@ ui.show()
 sys.exit(app.exec_())
 ```
 
-<!-- ![Example Image](https://github.com/astromancer/mpl-multitab/blob/master/tests/images/example_0.png "Example Image") -->
 
+## Groups of Figures
+
+You can group multiple related figures together using the `MplMultiTab2D` class.
+This is useful for visualising, for example, multiple datasets each having multiple 
+observations.
+```python
+ui = MplMultiTab2D()
+
+n = 100
+colours = 'rgb'
+markers = '123'
+for c, m in itt.product(colours, markers):
+    fig, ax = plt.subplots()
+    ax.scatter(*np.random.randn(2, n), color=c, marker=f'${m}$')
+    ui.add_tab(fig, f'Dataset {c.upper()}', f'Observation {m}')
+ui.show()
+```
+
+
+![Demo GIF 2 can be viewed at https://github.com/astromancer/mpl-multitab/blob/main/tests/demo.gif](/tests/demo2.gif)
+
+In this example all the datasets contain the same number of obervations, but this 
+need not be the case in general.
 
 <!-- For more examples see [Documentation]() -->
 
@@ -81,9 +108,10 @@ sys.exit(app.exec_())
 
 <!-- The [`test suite`](./tests) contains further examples of how
 `mpl-multitab` can be used.  Testing is done with `pytest`: -->
-Current [tests](/tests) are just the examples above
+Current [tests](/tests) are just the scripted examples above
 ```shell
-python test_multitab.py
+python tests/test_multitab.py
+python tests/test_multitab_2d.py
 ```
 
 # Contribute
@@ -111,7 +139,6 @@ Contributions are welcome!
 
 
 # Version
-This project uses [semantic versioning](https://semver.org/). The 
-latest version is
+This project uses [semantic versioning](https://semver.org/). The latest version is
 * 0.0.1
 
