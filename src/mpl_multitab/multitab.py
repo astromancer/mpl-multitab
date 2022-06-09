@@ -1,6 +1,7 @@
 """
 This script uses PyQt to create a gui which embeds matplotlib figures in a
-simple tabbed window navigator.
+simple tabbed window manager allowing easy navigation between many active
+figures.
 """
 
 # std
@@ -14,9 +15,6 @@ from matplotlib import use, pyplot as plt
 from matplotlib.backends.qt_compat import QtCore, QtWidgets
 from matplotlib.backends.backend_qt5 import (
     FigureCanvasQT as FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-
-# local
-from motley import format_partial
 
 
 # ---------------------------------------------------------------------------- #
@@ -58,12 +56,10 @@ class MplTabbedFigure(QtWidgets.QWidget):
         self.vbox.addWidget(canvas)
         self.setLayout(self.vbox)
 
-    # def save
-
 
 class TabManager(QtWidgets.QWidget):  # QTabWidget??
 
-    _tabname_template = 'Tab {}'
+    _tab_name_template = 'Tab {tab:}'
 
     def __init__(self, figures=(), labels=(), parent=None):
 
@@ -95,7 +91,7 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
 
         # set the default tab name
         if name is None:
-            name = self._tabname_template.format(self.tabs.count() + 1)
+            name = self._tab_name_template.format(self.tabs.count() + 1)
 
         tfig = MplTabbedFigure(fig)
         self.tabs.addTab(tfig, name)
@@ -137,17 +133,17 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
     def _check_filenames(self, filenames):
         n = self.tabs.count()
         if is_template_string(filenames):
-            logger.info('Saving {n} figures with filename template: {!r}',
-                        filenames)
+            logger.info('Saving {} figures with filename template: {!r}',
+                        n, filenames)
             # partial format string with dataset name
-            return (format_partial(filenames, self.tabs.tabText(_))
+            return ((filenames, self.tabs.tabText(_))
                     for _ in range(n))
 
         if isinstance(filenames, abc.Sequence):
             if (m := len(filenames)) != n:
                 raise ValueError(
                     f'Incorrect number of filenames {m}. There are {n} figure '
-                    f'stacks in this {self.__class__.__name__}.'
+                    f'groups in this {self.__class__.__name__}.'
                 )
 
             if isinstance(filenames, abc.MutableMapping):
@@ -204,8 +200,8 @@ class MplMultiTab(QtWidgets.QMainWindow):
 
 class TabManager2D(TabManager):
 
-    _tabname_template = 'Set {}'
-    _filename_template = '{}-{}.png'
+    _tab_name_template = 'Group {}'
+    _filename_template = '{:s}-{:s}.png'
 
     def __init__(self, figures=(), labels=(), parent=None):
 
@@ -226,14 +222,14 @@ class TabManager2D(TabManager):
         # tabs.setTabVisible(0, False)
 
         figures = dict(figures)
-        for setname, figs in figures.items():
-            for tabname, fig in figs.items():
-                self.add_tab(fig, setname, tabname)
+        for group_name, figs in figures.items():
+            for tab_name, fig in figs.items():
+                self.add_tab(fig, group_name, tab_name)
 
-    def add_stack(self, figures=(), name=None):
+    def add_group(self, figures=(), name=None):
         i = self.tabs.count()
         if name is None:
-            name = self._tabname_template.format(i)
+            name = self._tab_name_template.format(i)
 
         htabs = TabManager(figures)  # , parent=self)
         self.tabs.addTab(htabs, name)
@@ -241,24 +237,24 @@ class TabManager2D(TabManager):
             self.tabs.setCurrentIndex(i)
         self._items[name] = htabs
 
-    def add_tab(self, fig=None, setname=None, tabname=None):
+    def add_tab(self, fig=None, group_name=None, tab_name=None):
         """
         dynamically add tabs with embedded matplotlib canvas
         """
         if isinstance(fig, abc.Sequence):
-            return self.add_stack(fig, setname)
+            return self.add_group(fig, group_name)
 
         fig = fig or plt.gcf()
 
         i = self.tabs.currentIndex()  # 0 if no tabs yet
-        setname = (setname
-                   or self.tabs.tabText(i)
-                   or self._tabname_template.format(0))
+        group_name = (group_name
+                      or self.tabs.tabText(i)
+                      or self._tab_name_template.format(0))
 
-        if setname in self._items:
-            self._items[setname].add_tab(fig, tabname)
+        if group_name in self._items:
+            self._items[group_name].add_tab(fig, tab_name)
         else:
-            self.add_stack({tabname: fig}, setname)
+            self.add_group({tab_name: fig}, group_name)
 
     def save(self, filenames=(), folder='', **kws):
         n = self.tabs.count()
@@ -266,16 +262,16 @@ class TabManager2D(TabManager):
             logger.warning('No figures embedded yet, nothing to save!')
             return
 
+        if is_template_string(filenames):
+            raise NotImplementedError()
+
         filenames = self._check_filenames(filenames)
         for filenames, tabs in zip(filenames, self._items.values()):
             tabs.save(filenames, folder, **kws)
 
 
 class MplMultiTab2D(QtWidgets.QMainWindow):
-    """Combination tabs display matplotlib canvas"""
-
-    # _tabname_template = 'Set {}'
-    # _filename_template = '{}-{}.png'
+    """Combination tabs display matplotlib canvas."""
 
     def __init__(self, figures=(), title=None, parent=None):
         """ """
@@ -288,17 +284,17 @@ class MplMultiTab2D(QtWidgets.QMainWindow):
         self.main_frame.setFocus()
         self.setCentralWidget(self.main_frame)
 
-        self.stacks = TabManager2D(figures)
+        self.groups = TabManager2D(figures)
         layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.stacks)
+        layout.addWidget(self.groups)
         layout.setSpacing(0)
         self.main_frame.setLayout(layout)
 
-    def add_stack(self, figures=(), name=None):
-        self.stacks.add_stack(figures, name)
+    def add_group(self, figures=(), name=None):
+        self.groups.add_group(figures, name)
 
-    def add_tab(self, fig=None, setname=None, tabname=None):
+    def add_tab(self, fig=None, group_name=None, tab_name=None):
         """
         dynamically add tabs with embedded matplotlib canvas
         """
-        self.stacks.add_tab(fig, setname, tabname)
+        self.groups.add_tab(fig, group_name, tab_name)
