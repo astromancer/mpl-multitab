@@ -10,9 +10,10 @@ TODO
 [![GitHub](https://img.shields.io/github/license/astromancer/mpl-multitab.svg?color=blue)](https://mpl-multitab.readthedocs.io/en/latest/license.html)
  -->
 
-Ever struggle to navigate between a million open figures. I know your pain. 
+Ever struggle to navigate between a million open figures. I know your pain...
+
 `mpl-multitab` is a simple application that allows you to embed mutliple figures
-in a tabbed window. 
+in a tabbed figure manager. 
 
 
 # Install
@@ -22,9 +23,6 @@ pip install mpl-multitab
 ```
 
 # Use
-
-<!-- ## Example -->
-
 
 ## Interactive use
 At the start of your `jupyter notebook`, or `ipython` session, run the line magic to set the qt5 backend
@@ -46,6 +44,8 @@ for c in colours:
     ui.add_tab(fig, c)
 ui.show()
 ```
+
+![Demo GIF](/tests/demo.gif)
 
 
 ## In a script:
@@ -77,11 +77,11 @@ sys.exit(app.exec_())
 
 # Test
 
-The [`test suite`](./tests) contains further examples of how
-`mpl-multitab` can be used.  Testing is done with `pytest`:
-
+<!-- The [`test suite`](./tests) contains further examples of how
+`mpl-multitab` can be used.  Testing is done with `pytest`: -->
+Current [tests](/tests) are just the examples above
 ```shell
-pytest mpl-multitab
+python test_multitab.py
 ```
 
 # Contribute
@@ -109,7 +109,7 @@ Contributions are welcome!
 
 
 # Version
-This project uses a [semantic versioning](https://semver.org/) scheme. The 
+This project uses [semantic versioning](https://semver.org/). The 
 latest version is
 * 0.0.1
 
