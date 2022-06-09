@@ -6,7 +6,7 @@ import numpy as np
 from matplotlib import pylab as plt
 
 # local
-from scrawl.multitab import MplMultiTab, QtWidgets
+from mpl_multitab import MplMultiTab, QtWidgets
 
 
 # def test_multitab():

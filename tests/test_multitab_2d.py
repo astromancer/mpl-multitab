@@ -8,7 +8,7 @@ import numpy as np
 from matplotlib import pylab as plt
 
 # local
-from scrawl.multitab import MplMultiTab2D, QtWidgets
+from mpl_multitab import MplMultiTab2D, QtWidgets
 
 
 # Example use
