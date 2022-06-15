@@ -8,14 +8,15 @@ figures.
 import itertools as itt
 from pathlib import Path
 from collections import abc
+import sys
 
 # third-party
 from loguru import logger
-from matplotlib import use, pyplot as plt
+from matplotlib import use
 from matplotlib.backends.qt_compat import QtCore, QtWidgets
 from matplotlib.backends.backend_qt5 import (
     FigureCanvasQT as FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-
+from matplotlib.figure import Figure
 
 # ---------------------------------------------------------------------------- #
 use('QTAgg')
@@ -41,7 +42,7 @@ class MplTabbedFigure(QtWidgets.QWidget):
     def __init__(self, figure=None, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
 
-        figure = figure or plt.gcf()
+        figure = figure or Figure()
 
         # initialise FigureCanvas
         self.canvas = canvas = figure.canvas or FigureCanvas(figure)
@@ -88,6 +89,9 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
         """
         dynamically add tabs with embedded matplotlib canvas
         """
+        plt = sys.modules.get('matplotlib.pyplot')
+        if plt:
+            plt.close(fig)
 
         # set the default tab name
         if name is None:
@@ -98,7 +102,6 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
         self.tabs.setCurrentIndex(self.tabs.currentIndex() + 1)
         self._items[name] = tfig
 
-        plt.close(fig)
         return tfig.canvas
 
     def save(self, filenames=(), folder='', **kws):
@@ -244,7 +247,10 @@ class TabManager2D(TabManager):
         if isinstance(fig, abc.Sequence):
             return self.add_group(fig, group_name)
 
-        fig = fig or plt.gcf()
+        fig = fig or Figure()
+        plt = sys.modules.get('matplotlib.pyplot')
+        if plt:
+            plt.close(fig)
 
         i = self.tabs.currentIndex()  # 0 if no tabs yet
         group_name = (group_name
