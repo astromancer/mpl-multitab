@@ -102,7 +102,7 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
         self.tabs.setCurrentIndex(self.tabs.currentIndex() + 1)
         self._items[name] = tfig
 
-        return tfig.canvas
+        return fig
 
     def save(self, filenames=(), folder='', **kws):
         """
@@ -190,7 +190,7 @@ class MplMultiTab(QtWidgets.QMainWindow):
         self.show()
 
     def add_tab(self, fig=None, name=None):
-        self.tabs.add_tab(fig, name)
+        return self.tabs.add_tab(fig, name)
 
     def on_about(self):
         QtWidgets.QMessageBox.about(self, self.__class__.__name__,
@@ -262,6 +262,8 @@ class TabManager2D(TabManager):
         else:
             self.add_group({tab_name: fig}, group_name)
 
+        return fig
+
     def save(self, filenames=(), folder='', **kws):
         n = self.tabs.count()
         if n == 1:
@@ -303,4 +305,4 @@ class MplMultiTab2D(QtWidgets.QMainWindow):
         """
         dynamically add tabs with embedded matplotlib canvas
         """
-        self.groups.add_tab(fig, group_name, tab_name)
+        return self.groups.add_tab(fig, group_name, tab_name)
