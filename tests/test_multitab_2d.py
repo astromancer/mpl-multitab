@@ -24,7 +24,7 @@ markers = '123'
 for c, m in itt.product(colours, markers):
     fig, ax = plt.subplots()
     ax.scatter(*np.random.randn(2, n), color=c, marker=f'${m}$')
-    ui.add_tab(fig, f'Dataset {c.upper()}', f'Observation {m}')
+    ui.add_tab(f'Dataset {c.upper()}', f'Observation {m}', fig=fig)
 ui.show()
 
 if __name__ == '__main__':

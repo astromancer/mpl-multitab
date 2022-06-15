@@ -32,7 +32,7 @@ ui = MplMultiTab()
 for c in colours:
     fig, ax = plt.subplots()
     ax.scatter(*np.random.randn(2, n), color=c)
-    ui.add_tab(fig, c)
+    ui.add_tab(c, fig=fig)
 
 ui.show()
 if __name__ == '__main__':

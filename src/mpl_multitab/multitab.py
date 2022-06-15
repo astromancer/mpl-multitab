@@ -83,9 +83,9 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
             items = dict(figures).items()
 
         for name, fig in items:
-            self.add_tab(fig, name)
+            self.add_tab(name, fig=fig)
 
-    def add_tab(self, fig=None, name=None):
+    def add_tab(self, name=None, *, fig=None):
         """
         dynamically add tabs with embedded matplotlib canvas
         """
@@ -189,8 +189,8 @@ class MplMultiTab(QtWidgets.QMainWindow):
     def __exit__(self, exc_type, exc_value, traceback):
         self.show()
 
-    def add_tab(self, fig=None, name=None):
-        return self.tabs.add_tab(fig, name)
+    def add_tab(self, name=None, *, fig=None):
+        return self.tabs.add_tab(name, fig=fig)
 
     def on_about(self):
         QtWidgets.QMessageBox.about(self, self.__class__.__name__,
@@ -227,7 +227,7 @@ class TabManager2D(TabManager):
         figures = dict(figures)
         for group_name, figs in figures.items():
             for tab_name, fig in figs.items():
-                self.add_tab(fig, group_name, tab_name)
+                self.add_tab(group_name, tab_name, fig=fig)
 
     def add_group(self, figures=(), name=None):
         i = self.tabs.count()
@@ -240,7 +240,7 @@ class TabManager2D(TabManager):
             self.tabs.setCurrentIndex(i)
         self._items[name] = htabs
 
-    def add_tab(self, fig=None, group_name=None, tab_name=None):
+    def add_tab(self, group_name=None, tab_name=None, *, fig=None):
         """
         dynamically add tabs with embedded matplotlib canvas
         """
@@ -258,7 +258,7 @@ class TabManager2D(TabManager):
                       or self._tab_name_template.format(0))
 
         if group_name in self._items:
-            self._items[group_name].add_tab(fig, tab_name)
+            self._items[group_name].add_tab(tab_name, fig=fig)
         else:
             self.add_group({tab_name: fig}, group_name)
 
@@ -301,8 +301,8 @@ class MplMultiTab2D(QtWidgets.QMainWindow):
     def add_group(self, figures=(), name=None):
         self.groups.add_group(figures, name)
 
-    def add_tab(self, fig=None, group_name=None, tab_name=None):
+    def add_tab(self, group_name=None, tab_name=None, *, fig=None):
         """
         dynamically add tabs with embedded matplotlib canvas
         """
-        return self.groups.add_tab(fig, group_name, tab_name)
+        return self.groups.add_tab(group_name, tab_name, fig=fig)
