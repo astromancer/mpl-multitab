@@ -39,13 +39,11 @@ def is_template_string(s):
 
 class MplTabbedFigure(QtWidgets.QWidget):
 
-    def __init__(self, figure=None, parent=None):
+    def __init__(self, figure, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
 
-        figure = figure or Figure()
-
         # initialise FigureCanvas
-        self.canvas = canvas = figure.canvas or FigureCanvas(figure)
+        self.canvas = canvas = FigureCanvas(figure)
         canvas.setParent(self)
         canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
 
@@ -89,6 +87,8 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
         """
         dynamically add tabs with embedded matplotlib canvas
         """
+        fig = fig or Figure()
+
         plt = sys.modules.get('matplotlib.pyplot')
         if plt:
             plt.close(fig)
