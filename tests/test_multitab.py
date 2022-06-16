@@ -3,11 +3,12 @@ import sys
 
 # third-party
 import numpy as np
-from matplotlib import pylab as plt
+
 
 # local
 from mpl_multitab import MplMultiTab, QtWidgets
 
+sys.modules['matplotlib.pyplot'] = None
 
 # def test_multitab():
 # fig, ax = plt.subplots()
@@ -30,9 +31,9 @@ n = 100
 colours = 'rgb'
 ui = MplMultiTab()
 for c in colours:
-    fig, ax = plt.subplots()
+    fig = ui.add_tab(c)
+    ax = fig.subplots()
     ax.scatter(*np.random.randn(2, n), color=c)
-    ui.add_tab(c, fig=fig)
 
 ui.show()
 if __name__ == '__main__':
