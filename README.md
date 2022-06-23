@@ -46,9 +46,9 @@ ui = MplMultiTab()
 n = 100
 colours = 'rgb'
 for c in colours:
-    fig, ax = plt.subplots()
+    fig = ui.add_tab(c)
+    ax = fig.subplots()
     ax.scatter(*np.random.randn(2, n), color=c)
-    ui.add_tab(fig, c)
 ui.show()
 ```
 
@@ -81,6 +81,10 @@ You can group multiple related figures together using the `MplMultiTab2D` class.
 This is useful for visualising, for example, multiple datasets each having multiple 
 observations.
 ```python
+import itertools as itt
+from mpl_multitab import MplMultiTab2D
+
+
 ui = MplMultiTab2D()
 
 n = 100
