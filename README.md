@@ -67,9 +67,9 @@ ui = MplMultiTab()
 n = 100
 colours = 'rgb'
 for c in colours:
-    fig, ax = plt.subplots()
+    fig = ui.add_tab(c)
+    ax = fig.subplots()
     ax.scatter(*np.random.randn(2, n), color=c)
-    ui.add_tab(fig, c)
 ui.show()
 sys.exit(app.exec_())
 ```
@@ -87,14 +87,14 @@ n = 100
 colours = 'rgb'
 markers = '123'
 for c, m in itt.product(colours, markers):
-    fig, ax = plt.subplots()
+    fig = ui.add_tab(f'Dataset {c.upper()}', f'Observation {m}')
+    ax = fig.subplots()
     ax.scatter(*np.random.randn(2, n), color=c, marker=f'${m}$')
-    ui.add_tab(fig, f'Dataset {c.upper()}', f'Observation {m}')
 ui.show()
 ```
 
 
-![Demo GIF 2 can be viewed at https://github.com/astromancer/mpl-multitab/blob/main/tests/demo.gif](/tests/demo2.gif)
+![Demo GIF 2 can be viewed at https://github.com/astromancer/mpl-multitab/blob/main/tests/demo2.gif](/tests/demo2.gif)
 
 In this example all the datasets contain the same number of obervations, but this 
 need not be the case in general.
