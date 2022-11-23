@@ -32,7 +32,7 @@ python setup.py install
 # Use
 
 ## Interactive use
-At the start of your `jupyter notebook`, or `ipython` session, run the line magic to set the qt5 backend
+At the start of your `jupyter notebook`, or `ipython` session, run the line magic to set the qt backend
 ```
 %matplotlib qt5
 ```
@@ -135,7 +135,7 @@ Contributions are welcome!
 * e-mail: hannes@saao.ac.za
 
 <!-- ### Third party libraries
- * see [LIBRARIES](https://github.com/username/sw-name/blob/master/LIBRARIES.md) files -->
+ * see [requirements.txt](https://github.com/username/sw-name/blob/master/requirements.txt) files -->
 
 # License
 
@@ -144,5 +144,5 @@ Contributions are welcome!
 
 # Version
 This project uses [semantic versioning](https://semver.org/). The latest version is
-* 0.0.1
+* 0.1.0
 
