@@ -24,6 +24,10 @@ from matplotlib.backends.backend_qt import (
 # ---------------------------------------------------------------------------- #
 use('QTAgg')
 
+
+TAB_POS = {'N': QtWidgets.QTabWidget.North,
+           'W': QtWidgets.QTabWidget.West}
+
 # ---------------------------------------------------------------------------- #
 
 
@@ -31,7 +35,7 @@ def is_template_string(s):
     if not isinstance(s, str):
         return False
 
-    if '{' in s: # NOTE: this is a weak test
+    if '{' in s:  # NOTE: this is a weak test
         return True
 
     raise ValueError('Not a valid template string. Expected format string '
@@ -39,13 +43,14 @@ def is_template_string(s):
 
 # ---------------------------------------------------------------------------- #
 
- 
+
 class MplTabbedFigure(QtWidgets.QWidget):
 
     def __init__(self, figure, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
 
         # initialise FigureCanvas
+        self.figure = figure
         self.canvas = canvas = FigureCanvas(figure)
         canvas.setParent(self)
         canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
@@ -57,6 +62,7 @@ class MplTabbedFigure(QtWidgets.QWidget):
         self.vbox.addWidget(navtool)
         self.vbox.addWidget(canvas)
         self.setLayout(self.vbox)
+
 
 class TabManager(QtWidgets.QWidget):  # QTabWidget??
 
@@ -91,13 +97,13 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
         if isinstance(key, numbers.Integral):
             key = list(self._items.keys())[key]
         return self._items[key]
-    
+
     def __setitem__(self, tab_name, figure):
         if tab_name in self._items:
             raise NotImplementedError
-    
+
         self.add_tab(tab_name, fig=figure)
-    
+
     def add_tab(self, name=None, *, fig=None):
         """
         Dynamically add a tab with embedded matplotlib canvas.
@@ -214,28 +220,32 @@ class MplMultiTab(QtWidgets.QMainWindow):
         self.statusBar().addWidget(self.status_text, 1)
 
 
+
 class TabManager2D(TabManager):
 
     _tab_name_template = 'Group {}'
     _filename_template = '{:s}-{:s}.png'
 
-    def __init__(self, figures=(), labels=(), parent=None):
+    def __init__(self, figures=(), labels=(), group_pos='W', parent=None):
 
         # initialise empty
         TabManager.__init__(self, parent=parent)
 
-        # create the tab bars goroup switches (with tabs on left) the dataset
+        # tab bars group switches the dataset
         # being displayed in central panel which contains multiple observations
-        # that can be switched separately with top tabs
-        self.tabs.setTabPosition(QtWidgets.QTabWidget.West)
+        # that can be switched separately with nested tabs
+        group_pos = group_pos.upper()
+        self.tabs.setTabPosition(TAB_POS[group_pos])
         self.tabs.setMovable(True)
-        # add dead spacer tab
-        space_tab = QtWidgets.QTabWidget(self)
-        space_tab.setVisible(False)
-        space_tab.setEnabled(False)
-        self.tabs.addTab(space_tab, ' ')
-        self.tabs.setTabEnabled(0, False)
-        # tabs.setTabVisible(0, False)
+        
+        if group_pos == 'W':
+            # add dead spacer tab
+            space_tab = QtWidgets.QTabWidget(self)
+            space_tab.setVisible(False)
+            space_tab.setEnabled(False)
+            self.tabs.addTab(space_tab, ' ')
+            self.tabs.setTabEnabled(0, False)
+            # tabs.setTabVisible(0, False)
 
         figures = dict(figures)
         for group_name, figs in figures.items():
@@ -244,7 +254,7 @@ class TabManager2D(TabManager):
 
     def __setitem__(self, group_name, figure):
         raise NotImplementedError('TODO')
-    
+
     def add_group(self, figures=(), name=None):
         i = self.tabs.count()
         if name is None:
@@ -293,12 +303,13 @@ class TabManager2D(TabManager):
             tabs.save(filenames, folder, **kws)
 
 
+
 class MplMultiTab2D(QtWidgets.QMainWindow):
     """
     Combination tabs display matplotlib canvas.
     """
 
-    def __init__(self, figures=(), title=None, parent=None):
+    def __init__(self, figures=(), title=None, group_pos='W', parent=None):
         """ """
         super().__init__(parent)
         self.setWindowTitle(title or self.__class__.__name__)
@@ -309,12 +320,12 @@ class MplMultiTab2D(QtWidgets.QMainWindow):
         self.main_frame.setFocus()
         self.setCentralWidget(self.main_frame)
 
-        self.groups = TabManager2D(figures)
+        self.groups = TabManager2D(figures, group_pos=group_pos)
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.groups)
         layout.setSpacing(0)
         self.main_frame.setLayout(layout)
-        
+
     def __getitem__(self, groupname):
         return self.groups[groupname]
 
