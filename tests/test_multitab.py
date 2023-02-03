@@ -5,16 +5,16 @@ import sys
 import numpy as np
 
 # local
-from mpl_multitab import MplMultiTab, QtWidgets
+from mpl_multitab import MplTabs, QtWidgets
 
 #
 sys.modules['matplotlib.pyplot'] = None
 
 
 def test_multitab(n=100, colours='rgb'):
-    # Example use for MplMultiTab
+    # Example use for MplTabs
     # Create a scatter plot of `n` random xy-points for each colour
-    ui = MplMultiTab()
+    ui = MplTabs()
     for c in colours:
         fig = ui.add_tab(c)
         ax = fig.subplots()
