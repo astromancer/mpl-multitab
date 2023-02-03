@@ -82,6 +82,7 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
 
         super().__init__(parent)
         self._items = {}
+        self._focus_link_ids = []
         self.tabs = QtWidgets.QTabWidget(self)
         self.tabs.setMovable(True)
 
@@ -256,6 +257,32 @@ class NestedTabsManager(TabManager):
 
         return self[gid].add_tab(*keys, fig=fig)
 
+    def link_focus(self):
+        assert not self._focus_link_ids
+        
+        if not self._items:
+            return
+        
+        managers = list(self._items.values())
+        for pairs in itt.combinations(managers, 2):
+            for direction in (list, reversed):
+                mgr1, mgr2 = direction(pairs)
+                mgr1._focus_link_ids.append(
+                    mgr1.tabs.currentChanged.connect(mgr2.tabs.setCurrentIndex)
+                )
+
+        for mgr in managers:
+            if isinstance(mgr, NestedTabsManager):
+                mgr.link_focus()
+                
+        mgr = managers[0]
+        mgr.tabs.setCurrentIndex(mgr.tabs.currentIndex())
+                
+
+    def unlink_focus(self):
+        for cid in self._focus_link_ids:
+            self.tabs.currentChanged.disconnect(cid)
+            
     # def save(self, filenames=(), folder='', **kws):
     #     n = self.tabs.count()
     #     if n == 1:
@@ -337,6 +364,9 @@ class MplMultiTab(MplTabGui):
         for i in indices:
             widget.setCurrentIndex(i)
             widget = getattr(widget.currentWidget(), 'tabs', None)
+
+    def link_focus(self):
+        return self.tabs.link_focus()
 
 
 class MplMultiTab2D(MplMultiTab):

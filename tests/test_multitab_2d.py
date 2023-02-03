@@ -26,6 +26,7 @@ def test_multitab_2d(n=100, colours='rgb', markers='123'):
         ax.scatter(*np.random.randn(2, n), color=c, marker=f'${m}$')
     
     ui.set_focus(0, 0)
+    ui.link_focus()
     return ui
 
 
