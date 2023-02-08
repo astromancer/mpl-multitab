@@ -11,7 +11,7 @@ from mpl_multitab import MplTabs, QtWidgets
 sys.modules['matplotlib.pyplot'] = None
 
 
-def test_simple_tabs(n=100, colours='rgb'):
+def example_basic(n=100, colours='rgb'):
     # Example use for MplTabs
     # Create a scatter plot of `n` random xy-points for each colour
     ui = MplTabs()
@@ -26,6 +26,6 @@ def test_simple_tabs(n=100, colours='rgb'):
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    ui = test_simple_tabs()
+    ui = example_basic()
     ui.show()
     sys.exit(app.exec_())

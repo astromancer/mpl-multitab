@@ -28,8 +28,12 @@ from recipes.logging import LoggingMixin
 use('QTAgg')
 
 
-TAB_POS = {'N': QtWidgets.QTabWidget.North,
-           'W': QtWidgets.QTabWidget.West}
+TAB_POS = {
+    'N': QtWidgets.QTabWidget.North,
+    'W': QtWidgets.QTabWidget.West,
+    'S': QtWidgets.QTabWidget.South,
+    'E': QtWidgets.QTabWidget.East,
+}
 
 # ---------------------------------------------------------------------------- #
 
@@ -137,7 +141,7 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
         return f'<{self.__class__.__name__}: {pre}level={self._level()}{post}>'
 
     def __len__(self):
-        return self.tabs.count()
+        return self.tabs.count() - self.index_offset
 
     def __getitem__(self, key):
 
@@ -145,11 +149,12 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
             return self._items[key]
 
         n = len(self)
+        key = key
         if key >= n or key < -n:
             raise IndexError(f'Index {key} out of range for '
                              f'{self.__class__.__name__} with {n} tabs.')
 
-        return self.tabs.widget(key % n)
+        return self.tabs.widget((key % n) + self.index_offset)
 
     def __setitem__(self, tab_name, figure):
         if tab_name in self._items:
@@ -189,16 +194,16 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
 
     def _level(self):
         return len(list(self._ancestors()))
-    
+
     def _height(self):
         return len(list(self._current_index()))
-    
+
     # def _descendants(self):
     #     return
-        
+
     # # alias
     # _descendents = _descendants
-    
+
     def _siblings(self):
         return tuple(set(parent) - {self}) if (parent := self._parent()) else ()
 
@@ -236,6 +241,7 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
         self._cid_focus_match = None
 
     def _match_focus(self, i):
+        i = i - self.index_offset
         self.logger.debug('Callback {!r}: {}', self, i)
 
         *current, _ = self._index_up()
@@ -256,7 +262,7 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
 
         self.logger.debug('Linking focus at active toplevel.')
         toplevel.link_focus()
-        
+
         # for mgr, idx in zip(branch[::-1], current
 
         # for mgr, idx in zip(branch, current[::-1]):
@@ -319,7 +325,8 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
     def _plot(self, i, *args, **kws):
         self.logger.debug('Checking if plot needed: {!r}', i)
 
-        if (fig := self.get_figure(i)).axes:
+        indices = [*self._index_up(), i]
+        if (fig := self.get_figure(indices)).axes:
             self.logger.debug('Plot {!r} already initialized.', i)
             return
 
@@ -327,7 +334,7 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
             self.logger.debug('No plot method defined.')
             return
 
-        indices = [*self._index_up(), i]
+        
         self.logger.debug('Creating plot {!r}.', indices)
         return self.plot(fig, indices, *args, **kws)
 
@@ -420,16 +427,13 @@ class NestedTabsManager(TabManager):
         # if figures:
         #     self.link_focus()
 
-    # ------------------------------------------------------------------------ #
-
-    def _get_item(self, key):
+    # ------------------------------------------------------------------------ #        
+    def get_figure(self, key):
         obj = self
         for k in key:
             obj = obj[k]
-        return obj
+        return obj.figure
 
-    def get_figure(self, key):
-        return self._get_item(key).figure
 
     def _current(self):
         widget = self
@@ -441,12 +445,12 @@ class NestedTabsManager(TabManager):
     def _current_index(self):
         for i, _ in self._current():
             yield i
-    
+
     # def _descendants(self):
     #     for mgr in self:
     #         yield mgr
     #         yield from mgr.descendants()
-    
+
     # ------------------------------------------------------------------------ #
 
     # def add_callback(self, func):
@@ -535,7 +539,7 @@ class NestedTabsManager(TabManager):
         # None can be used as sentinel to mean keep focus the same below
         if i is None:
             return
-        
+
         self.tabs.setCurrentIndex(idx := i + self.index_offset)
         self._previous = idx
 
@@ -544,10 +548,11 @@ class NestedTabsManager(TabManager):
             mgr.set_focus(*indices)
 
     def _match_focus(self, i):
+        i = i - self.index_offset
         logger.debug('{!r} {}', self, i)
         # disconnect callback from previously active tab
         if self._previous != -1:
-            previous = self.tabs.widget(self._previous)
+            previous = self.tabs.widget(self._previous + self.index_offset)
             previous.unlink_focus()
             current = list(previous._current_index())
         else:
@@ -587,52 +592,6 @@ class NestedTabsManager(TabManager):
         else:
             target = self._active()
         target.unlink_focus(*indices)
-
-    # def _match_sibling_focus(self, indices):
-    #     # match current indices of other groups to group i
-
-    #     # i, active = next(self._current())
-    #     i, *indices = indices
-    #     self.logger.info('Matching tab focus at level {}, index {}',
-    #                      self._level(), i)
-
-    #     # propagate down
-    #     for mgr in self.siblings:
-    #         mgr.tabs.setCurrentIndex(i)
-
-    #     self.active()._match_sibling_focus(indices)
-
-        # mgr._match_sibling_focus()
-
-        # self._link_focus = True
-        # self.add_callback(None)
-
-        # assert not self._focus_link_ids
-
-        # if not self._items:
-        #     return
-
-        # # children
-        # # children = list(self)
-        # children = list(self._items.items())
-
-        # for mgr in self:
-        #     mgr.link_focus()
-
-        # level = len(list(self._current()))
-        # print('LINKING pairs', 'level', level, self)
-        # for pairs in itt.combinations(children, 2):
-        #     print(pairs)
-        #     _, pairs = zip(*pairs)
-        #     for direction in (list, reversed):
-        #         mgr1, mgr2 = direction(pairs)
-        #         mgr1._focus_link_ids.append(
-        #             mgr1.tabs.currentChanged.connect(mgr2.tabs.setCurrentIndex)
-        #         )
-
-        # # set current tabs same across groups
-        # mgr = self.tabs.currentWidget()
-        # mgr.tabs.setCurrentIndex(mgr.tabs.currentIndex())
 
     # def save(self, filenames=(), folder='', **kws):
     #     n = self.tabs.count()

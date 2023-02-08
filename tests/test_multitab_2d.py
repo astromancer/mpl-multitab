@@ -7,13 +7,13 @@ import itertools as itt
 import numpy as np
 
 # local
-from mpl_multitab import QtWidgets, MplMultiTab, NestedTabsManager
+from mpl_multitab import QtWidgets, MplMultiTab
 
-#
+# ensure we don't use pyplot
 sys.modules['matplotlib.pyplot'] = None
 
 
-def test_multitab_2d(n=100, colours='rgb', markers='123'):
+def example_2d(n=100, colours='rgb', markers='123'):
     # Example use for MplTabs2D
     # This dataset is equal number observations per dataset. This need not be the
     # case in general.
@@ -31,7 +31,14 @@ def test_multitab_2d(n=100, colours='rgb', markers='123'):
     return ui
 
 
-def test_delay_draw(n=10_000, colours='rgb', markers='123'):
+# def test_2d(qtbot):
+#     ui = example_2d()
+#     ui.show()
+#     # register ui
+#     qtbot.addWidget(ui)
+
+
+def example_delay_draw(n=10_000, colours='rgb', markers='123'):
 
     #
     ui = MplMultiTab()
@@ -54,13 +61,9 @@ def test_delay_draw(n=10_000, colours='rgb', markers='123'):
     return ui
 
 
-
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    ui = test_multitab_2d()
-    # ui = test_delay_draw_hack()
+    ui = example_2d()
     # ui = test_delay_draw()
     ui.show()
-    # from IPython import embed
-    # embed(header="Embedded interpreter at 'tests/test_multitab_2d.py':94")
     sys.exit(app.exec_())
