@@ -1,7 +1,6 @@
 """
-This script uses PyQt to create a gui which embeds matplotlib figures in a
-simple tabbed window manager allowing easy navigation between many active
-figures.
+This library uses PyQt to create a gui which embeds matplotlib figures in a
+tabbed window manager allowing easy navigation between many active figures.
 """
 
 # std
@@ -19,6 +18,10 @@ from matplotlib.backends.qt_compat import QtCore, QtWidgets
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt import (
     NavigationToolbar2QT as NavigationToolbar)
+
+# local
+import recipes.pprint as pp
+from recipes.logging import LoggingMixin
 
 
 # ---------------------------------------------------------------------------- #
@@ -73,40 +76,24 @@ class MplTabbedFigure(QtWidgets.QWidget):
         self.vbox.addWidget(canvas)
         self.setLayout(self.vbox)
 
+#
 
-class TabManager(QtWidgets.QWidget):  # QTabWidget??
+
+class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
 
     _tab_name_template = 'Tab {}'
+    plot = None
 
     def __init__(self, figures=(), pos='N', parent=None):
 
         super().__init__(parent)
         self._items = {}
-        self._focus_link_ids = []
         self.tabs = QtWidgets.QTabWidget(self)
-        self.tabs.setMovable(True)
+        #
+        self._cid_focus_match = None
 
-        # layout
-        layout = QtWidgets.QVBoxLayout()
-        layout.addWidget(self.tabs)
-        # make horizontal and vertical tab widgets overlap fully
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-        self.setLayout(layout)
-
-        # tab position
-        self.pos = pos = pos.upper()
-        self.tabs.setTabPosition(TAB_POS[pos])
-        self.tabs.setMovable(True)
-
-        if pos == 'W':
-            # add inactive spacer tab
-            space_tab = QtWidgets.QTabWidget(self)
-            space_tab.setVisible(False)
-            space_tab.setEnabled(False)
-            self.tabs.addTab(space_tab, ' ')
-            self.tabs.setTabEnabled(0, False)
-            # tabs.setTabVisible(0, False)
+        #
+        self._layout(pos)
 
         # resolve figures
         if isinstance(figures, abc.Sequence):
@@ -118,10 +105,51 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
         for name, fig in items:
             self.add_tab(name, fig=fig)
 
+    def _layout(self, pos):
+        # layout
+        layout = QtWidgets.QVBoxLayout()
+        layout.addWidget(self.tabs)
+        # make horizontal and vertical tab widgets overlap fully
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        self.setLayout(layout)
+
+        # tab position
+        self.pos = pos = pos.upper()
+        self.tabs.setTabPosition(TAB_POS[pos])
+
+        if pos == 'W':
+            # add inactive spacer tab
+            space_tab = QtWidgets.QTabWidget(self)
+            space_tab.setVisible(False)
+            space_tab.setEnabled(False)
+            self.tabs.addTab(space_tab, ' ')
+            self.tabs.setTabEnabled(0, False)
+            # tabs.setTabVisible(0, False)
+
+    def __repr__(self):
+        pre = post = ''
+        if parent := self._parent():
+            index = parent.tabs.indexOf(self)
+            name = parent.tabs.tabText(index)
+            pre = f'{name!r}, '
+            post = f', {index=}'
+        return f'<{self.__class__.__name__}: {pre}level={self._level()}{post}>'
+
+    def __len__(self):
+        return self.tabs.count()
+
     def __getitem__(self, key):
-        if isinstance(key, numbers.Integral):
-            return self.tabs.widget(key)
-        return self._items[key]
+
+        if not isinstance(key, numbers.Integral):
+            return self._items[key]
+
+        n = len(self)
+        if key >= n or key < -n:
+            raise IndexError(f'Index {key} out of range for '
+                             f'{self.__class__.__name__} with {n} tabs.')
+
+        return self.tabs.widget(key % n)
 
     def __setitem__(self, tab_name, figure):
         if tab_name in self._items:
@@ -129,10 +157,143 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
 
         self.add_tab(tab_name, fig=figure)
 
-    def add_tab(self, name=None, *, fig=None):
+    # ------------------------------------------------------------------------ #
+    @property
+    def index_offset(self):
+        return int(self.pos == 'W')
+
+    def _index_up(self):
+        # index of this manager widget wrt MplMultiTab
+        indices = []
+        manager = self
+        while parent := manager._parent():
+            indices.append(parent.tabs.indexOf(manager))
+            manager = parent
+        return indices[::-1]
+
+    def _current_index(self):
+        return (self.tabs.currentIndex() - self.index_offset, )
+
+    def _parent(self):
+        return self.parent().parent().parent()  # ^_^
+
+    def _ancestors(self):
+        manager = self
+        while parent := manager._parent():
+            yield parent
+            manager = parent
+
+    def _root(self):
+        *_, root = self._ancestors()
+        return root
+
+    def _level(self):
+        return len(list(self._ancestors()))
+    
+    def _height(self):
+        return len(list(self._current_index()))
+    
+    # def _descendants(self):
+    #     return
+        
+    # # alias
+    # _descendents = _descendants
+    
+    def _siblings(self):
+        return tuple(set(parent) - {self}) if (parent := self._parent()) else ()
+
+    def _is_active(self):
+        return (parent._active() is self) if (parent := self._parent()) else True
+
+    def _active(self):
+        return self.tabs.currentWidget()
+
+    def _inactive(self):
+        return self._active()._siblings()
+
+    # ------------------------------------------------------------------------ #
+    def set_focus(self, i):
+        self.tabs.setCurrentIndex(i + self.index_offset)
+
+    def link_focus(self):
+        if self._cid_focus_match:
+            self.logger.debug('Focus matching already active on {}. Nothing to '
+                              'do here.', self)
+            return
+
+        self.logger.debug('Adding callback {} to group: {!r}',
+                          pp.caller(self._match_focus), self)
+        self._cid_focus_match = self.tabs.currentChanged.connect(self._match_focus)
+
+    def unlink_focus(self):
+        if not self._cid_focus_match:
+            self.logger.debug('No focus matching active on {!r}. Nothing to do '
+                              'here.', self)
+            return
+
+        self.logger.debug('Removing focus callback from group: {!r}', self)
+        self.tabs.currentChanged.disconnect(self._cid_focus_match)
+        self._cid_focus_match = None
+
+    def _match_focus(self, i):
+        self.logger.debug('Callback {!r}: {}', self, i)
+
+        *current, _ = self._index_up()
+        self.logger.debug('Current: {}', [*current, _])
+
+        # disonnect parent callbacks
+        self.logger.debug('Unlinking focus at active toplevel.')
+        root = self._root()
+        toplevel = root._active()
+        toplevel.unlink_focus()
+        root.set_focus(*current, None)
+
+        focus = (*current, i)
+        self.logger.debug('Callback setting {!r} sibling focus to: {}',
+                          self, focus)
+        for mgr in self._siblings():
+            mgr.set_focus(i)
+
+        self.logger.debug('Linking focus at active toplevel.')
+        toplevel.link_focus()
+        
+        # for mgr, idx in zip(branch[::-1], current
+
+        # for mgr, idx in zip(branch, current[::-1]):
+
+        # for mgr, idx in zip(branch, current[::-1]):  # bottom up
+        #     if next(mgr._current_index()) != idx:
+        #         # disconnect focus callback
+        #         if mgr._cid_focus_match:
+        #             mgr.unlink_focus()
+
+        #         self.logger.debug('{}: {}', mgr, idx)
+        #         mgr.tabs.setCurrentIndex(idx)
+        #         mgr.link_focus()
+
+        # focus = (*current, i)
+        # self.logger.debug('Callback setting {!r} inactive parents focus to: {}',
+        #                   self, focus)
+        # for mgr in self._root()._inactive():
+        #     mgr.set_focus(*focus)
+
+    # ------------------------------------------------------------------------ #
+
+    def add_callback(self, func):
+        # connect plot callback
+        if not (func and callable(func)):
+            self.logger.debug('Invalid object for callback: {}', func)
+            return
+
+        self.logger.debug('Adding callback: {}', pp.caller(func))
+        self.plot = func
+        self.tabs.currentChanged.connect(self._plot)
+
+    def add_tab(self, name=None, *, fig=None, focus=True):
         """
         Dynamically add a tab with embedded matplotlib canvas.
         """
+        self.logger.debug('Adding tab {!r}', name)
         fig = fig or Figure()
 
         if plt := sys.modules.get('matplotlib.pyplot'):
@@ -140,14 +301,35 @@ class TabManager(QtWidgets.QWidget):  # QTabWidget??
 
         # set the default tab name
         if name is None:
-            name = self._tab_name_template.format(self.tabs.count() + 1)
+            name = self._tab_name_template.format(self.tabs.count() - self.index_offset + 1)
 
-        tfig = MplTabbedFigure(fig)
-        self.tabs.addTab(tfig, name)
-        self.tabs.setCurrentIndex(self.tabs.currentIndex() + 1)
-        self._items[name] = tfig
+        self._items[name] = tab = MplTabbedFigure(fig)
+        self.tabs.addTab(tab, name)
+
+        if focus:
+            logger.debug('focussing on {}', self.tabs.currentIndex() + 1)
+            self.tabs.setCurrentIndex(self.tabs.currentIndex() + 1)
 
         return fig
+
+    # ------------------------------------------------------------------------ #
+    def get_figure(self, i):
+        return self[i].figure
+
+    def _plot(self, i, *args, **kws):
+        self.logger.debug('Checking if plot needed: {!r}', i)
+
+        if (fig := self.get_figure(i)).axes:
+            self.logger.debug('Plot {!r} already initialized.', i)
+            return
+
+        if not self.plot:
+            self.logger.debug('No plot method defined.')
+            return
+
+        indices = [*self._index_up(), i]
+        self.logger.debug('Creating plot {!r}.', indices)
+        return self.plot(fig, indices, *args, **kws)
 
     def save(self, filenames=(), folder='', **kws):
         """
@@ -218,34 +400,103 @@ class NestedTabsManager(TabManager):
     def __init__(self, figures=(), pos='N', parent=None):
 
         # initialise empty
-        TabManager.__init__(self, pos=pos, parent=parent)
+        TabManager.__init__(self, (), pos, parent)
+        #
+        self._previous = -1
+        self._cid_otc = None
 
-        # tabs switches the group
-        # being displayed in central panel which may itself be NestedTabsManager
-        # or TabManager at lowest level
-
+        # tabs switches the group being displayed in central panel which may
+        # itself be NestedTabsManager or TabManager at lowest level
         figures = dict(figures)
         for name, figs in figures.items():
             self.add_group(name, figs)
 
-    def add_group(self, name=None, figures=(), kls=None):
-        i = self.tabs.count()
-        if name is None:
-            name = self._tab_name_template.format(i)
+        if self.plot:
+            self.logger.debug('Detected figure initializer method {}. '
+                              'Connecting group tab change callback to this method.',
+                              pp.caller(self.plot))
+            self.add_callback(self, self.plot)
 
-        print(f'Adding group {name!r}')
+        # if figures:
+        #     self.link_focus()
 
-        kls = kls or type(self)
-        self._items[name] = nested = kls(figures)
-        self.tabs.addTab(nested, name)
+    # ------------------------------------------------------------------------ #
 
-        if i == (self.pos == 'W'):
-            self.tabs.setCurrentIndex(i)
+    def _get_item(self, key):
+        obj = self
+        for k in key:
+            obj = obj[k]
+        return obj
 
-    def add_tab(self, *keys, fig=None):
+    def get_figure(self, key):
+        return self._get_item(key).figure
+
+    def _current(self):
+        widget = self
+        while not isinstance(widget, MplTabbedFigure):
+            i = widget.tabs.currentIndex() - self.index_offset
+            widget = widget.tabs.currentWidget()
+            yield i, widget
+
+    def _current_index(self):
+        for i, _ in self._current():
+            yield i
+    
+    # def _descendants(self):
+    #     for mgr in self:
+    #         yield mgr
+    #         yield from mgr.descendants()
+    
+    # ------------------------------------------------------------------------ #
+
+    # def add_callback(self, func):
+
+    #     if not self._is_active():
+    #         return
+
+    #     # Connect method that plots active figure
+    #     self.logger.debug('Adding callback to active group: {}',
+    #                       pp.caller(self._on_tab_change))
+    #     self._cid_otc = self.tabs.currentChanged.connect(self._on_tab_change)
+
+        # propagate down
+        # for mgr, self._current_index())
+        # for mgr in self:
+        #     mgr.add_callback(func)
+
+    def remove_callback(self, cid):
+        return self.tabs.currentChanged.disconnect(cid)
+
+    def _on_tab_change(self, i):
+        # This will run *before* qt switches the tabs on mouse click
+        before = [tuple(q._current_index()) for q in self]
+
+        self.logger.info('Tab change callback level {}! CURRENT indices:{}',
+                         self._level(), before)
+
+        # if self._cid_focus_match:
+
+        after = [tuple(q._current_index()) for q in self]
+        self.logger.info('AFTER Tab change callback indices:\n{}', after)
+
+        # do plot
+        self._plot_active_tab(i)
+
+    def _plot_active_tab(self, i):
+        self.logger.debug('Plot callback initiated by group switch. New group is {}', i)
+        #
+        indices, (*_, active_mgr, _) = zip(*self._current())
+        self.logger.debug('new index: {}', indices)
+        active_mgr._plot(indices[-1])
+
+    # ------------------------------------------------------------------------ #
+    def add_tab(self, *keys, fig=None, focus=True):
+        """
+        Add a (nested) tab.
+        """
+        self.logger.debug('Adding tab: {}', keys)
+
         gid, *keys = keys
-        print('Adding tab', gid, keys)
-
         if gid not in self._items:
             if not keys:
                 raise NotImplementedError
@@ -253,36 +504,136 @@ class NestedTabsManager(TabManager):
             # add nested tabs
             self.add_group(gid,
                            (fig or {}).get(gid, ()),
-                           kls=NestedTabsManager if (len(keys) > 1) else TabManager)
+                           kls=TabManager if (len(keys) == 1) else type(self))
 
-        return self[gid].add_tab(*keys, fig=fig)
+        return self[gid].add_tab(*keys, fig=fig, focus=not self.plot)
 
-    def link_focus(self):
-        assert not self._focus_link_ids
-        
-        if not self._items:
+    def add_group(self, name=None, figures=(), kls=None):
+        """
+        Add a (nested) tab group.
+        """
+        i = self.tabs.count()
+        if name is None:
+            name = self._tab_name_template.format(i)
+
+        self.logger.debug(f'Adding group {name!r}')
+
+        kls = kls or type(self)
+        self._items[name] = nested = kls(figures, parent=self)
+        self.tabs.addTab(nested, name)
+
+        if i == self.index_offset:
+            self.tabs.setCurrentIndex(i)
+
+        return nested
+
+    # -------------------------------------------------------------------- #
+    def set_focus(self, *indices):
+        self.logger.debug('{!r} focus {}', self, indices)
+        i, *indices = indices
+
+        # None can be used as sentinel to mean keep focus the same below
+        if i is None:
             return
         
-        managers = list(self._items.values())
-        for pairs in itt.combinations(managers, 2):
-            for direction in (list, reversed):
-                mgr1, mgr2 = direction(pairs)
-                mgr1._focus_link_ids.append(
-                    mgr1.tabs.currentChanged.connect(mgr2.tabs.setCurrentIndex)
-                )
+        self.tabs.setCurrentIndex(idx := i + self.index_offset)
+        self._previous = idx
 
-        for mgr in managers:
-            if isinstance(mgr, NestedTabsManager):
-                mgr.link_focus()
-                
-        mgr = managers[0]
-        mgr.tabs.setCurrentIndex(mgr.tabs.currentIndex())
-                
+        itr = self if self._cid_focus_match else [self._active()]
+        for mgr in itr:
+            mgr.set_focus(*indices)
 
-    def unlink_focus(self):
-        for cid in self._focus_link_ids:
-            self.tabs.currentChanged.disconnect(cid)
-            
+    def _match_focus(self, i):
+        logger.debug('{!r} {}', self, i)
+        # disconnect callback from previously active tab
+        if self._previous != -1:
+            previous = self.tabs.widget(self._previous)
+            previous.unlink_focus()
+            current = list(previous._current_index())
+        else:
+            current = [0] * self._height()
+        self._previous = i
+
+        # set focus of the new target group same as previous
+        target = self[i]
+        self.logger.debug('{!r} matching target group {} focus with current: {}',
+                          self, i, current)
+        target.set_focus(*current)
+
+        #  also set focus of siblings
+        focus = i, *current
+        self.logger.debug('{!r} matching sibling groups focus with current: {}',
+                          self, focus)
+        for mgr in self._siblings():
+            mgr.set_focus(*focus)
+
+        # add focus linking callback to new group
+        target.link_focus()
+
+    def link_focus(self, *indices):
+        super().link_focus()
+        if indices:
+            i, *indices = indices
+            target = self[i]
+        else:
+            target = self._active()
+        target.link_focus(*indices)
+
+    def unlink_focus(self, *indices):
+        super().unlink_focus()
+        if indices:
+            i, *indices = indices
+            target = self[i]
+        else:
+            target = self._active()
+        target.unlink_focus(*indices)
+
+    # def _match_sibling_focus(self, indices):
+    #     # match current indices of other groups to group i
+
+    #     # i, active = next(self._current())
+    #     i, *indices = indices
+    #     self.logger.info('Matching tab focus at level {}, index {}',
+    #                      self._level(), i)
+
+    #     # propagate down
+    #     for mgr in self.siblings:
+    #         mgr.tabs.setCurrentIndex(i)
+
+    #     self.active()._match_sibling_focus(indices)
+
+        # mgr._match_sibling_focus()
+
+        # self._link_focus = True
+        # self.add_callback(None)
+
+        # assert not self._focus_link_ids
+
+        # if not self._items:
+        #     return
+
+        # # children
+        # # children = list(self)
+        # children = list(self._items.items())
+
+        # for mgr in self:
+        #     mgr.link_focus()
+
+        # level = len(list(self._current()))
+        # print('LINKING pairs', 'level', level, self)
+        # for pairs in itt.combinations(children, 2):
+        #     print(pairs)
+        #     _, pairs = zip(*pairs)
+        #     for direction in (list, reversed):
+        #         mgr1, mgr2 = direction(pairs)
+        #         mgr1._focus_link_ids.append(
+        #             mgr1.tabs.currentChanged.connect(mgr2.tabs.setCurrentIndex)
+        #         )
+
+        # # set current tabs same across groups
+        # mgr = self.tabs.currentWidget()
+        # mgr.tabs.setCurrentIndex(mgr.tabs.currentIndex())
+
     # def save(self, filenames=(), folder='', **kws):
     #     n = self.tabs.count()
     #     if n == 1:
@@ -293,30 +644,29 @@ class NestedTabsManager(TabManager):
     #         raise NotImplementedError()
 
     #     filenames = self._check_filenames(filenames)
-    #     for filenames, tabs in zip(filenames, self._items.values()):
+    #     for filenames, tabs in zip(filenames, self):
     #         tabs.save(filenames, folder, **kws)
 
 
-class MplTabGui(QtWidgets.QMainWindow):
+class MplTabGUI(QtWidgets.QMainWindow):
 
-    def __init__(self, figures=(), title=None, manager=TabManager, parent=None, **kws):
+    def __init__(self, figures=(), title=None, pos='N',
+                 manager=TabManager, parent=None, **kws):
 
         super().__init__(parent)
         self.setWindowTitle(title or self.__class__.__name__)
-        # self.setAttribute(QtCore.Qt.WA_DeleteOnClose)
 
         # create main widget
         self.main_frame = QtWidgets.QWidget(self)
         self.main_frame.setFocus()
         self.setCentralWidget(self.main_frame)
 
-        self.tabs = manager(figures, parent=self.main_frame, **kws)
+        self.tabs = manager(figures, pos, parent=self.main_frame, **kws)
+        self.tabs.tabs.setMovable(True)  # outer tabs movable
+
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.tabs)
         self.main_frame.setLayout(layout)
-
-        # self.create_menu()
-        # self.create_status_bar()
 
     def __getitem__(self, key):
         return self.tabs[key]
@@ -333,42 +683,42 @@ class MplTabGui(QtWidgets.QMainWindow):
     def add_tab(self, name=None, *, fig=None):
         return self.tabs.add_tab(name, fig=fig)
 
-    # def on_about(self):
-    #     QtWidgets.QMessageBox.about(self, self.__class__.__name__,
-    #                                 'Tabbed FigureCanvas Manager')
+    def set_focus(self, *indices):
+        self.tabs.set_focus(*indices)
 
-    # def create_status_bar(self):
-    #     self.status_text = QtWidgets.QLabel('')
-    #     self.statusBar().addWidget(self.status_text, 1)
+    def add_callback(self, func):
+        return self.tabs.add_callback(func)
 
 
-class MplMultiTab(MplTabGui):
+# aliases
+MplTabs = MplTabGui = MplTabGUI
+
+
+class MplMultiTab(MplTabGUI):
     """
     Combination tabs for displaying matplotlib figures.
     """
 
-    def __init__(self, figures=(), title=None,  pos='N', parent=None, **kws):
-        super().__init__(figures, title, NestedTabsManager, parent, **kws)
+    def __init__(self, figures=(), title=None, pos='N',
+                 manager=NestedTabsManager,
+                 parent=None, **kws):
+        #
+        super().__init__(figures, title, pos, manager, parent, **kws)
 
     def add_group(self, name=None, figures=()):
         self.tabs.add_group(name, figures)
 
     def add_tab(self, *keys, fig=None):
         """
-        Add a tab to a tab group.
+        Add a (nested) tab.
         """
         return self.tabs.add_tab(*keys, fig=fig)
 
-    def set_focus(self, *indices):
-        widget = self.tabs.tabs
-        for i in indices:
-            widget.setCurrentIndex(i)
-            widget = getattr(widget.currentWidget(), 'tabs', None)
-
     def link_focus(self):
-        return self.tabs.link_focus()
+        self.tabs.link_focus()
+        # self.tabs.add_callback()
 
 
 class MplMultiTab2D(MplMultiTab):
     def __init__(self, figures=(), title=None, pos='W', parent=None):
-        super().__init__(figures, title, pos, parent)
+        super().__init__(figures, title, pos, parent=parent)
