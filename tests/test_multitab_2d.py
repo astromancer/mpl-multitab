@@ -39,7 +39,6 @@ def example_2d(n=100, colours='rgb', markers='123'):
 
 
 def example_delay_draw(n=10_000, colours='rgb', markers='123'):
-
     #
     ui = MplMultiTab()
     # first create the figures, but don't do the plotting just yet
@@ -56,14 +55,20 @@ def example_delay_draw(n=10_000, colours='rgb', markers='123'):
                           marker=f'${markers[j]}$')
 
     ui.link_focus()         # link focus tabs between groups
-    ui.add_callback(plot)   # add our worker
+    ui.add_callback(plot)   # add your worker
     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
     return ui
+
+# def test_delay_draw(qtbot):
+#     ui = example_delay_draw()
+#     ui.show()
+#     # register ui
+#     qtbot.addWidget(ui)
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    ui = example_2d()
+    ui = example_delay_draw()
     # ui = test_delay_draw()
     ui.show()
     sys.exit(app.exec_())

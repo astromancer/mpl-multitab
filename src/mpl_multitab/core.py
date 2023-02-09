@@ -61,7 +61,64 @@ def depth(obj, _depth=0):
 # ---------------------------------------------------------------------------- #
 
 
-class MplTabbedFigure(QtWidgets.QWidget):
+class TabNode(QtWidgets.QWidget, LoggingMixin):
+    def __repr__(self):
+        pre = post = ''
+        if parent := self._parent():
+            index = parent.tabs.indexOf(self)
+            name = parent.tabs.tabText(index)
+            pre = f'{name!r}, '
+            post = f', {index=}'
+        return f'<{self.__class__.__name__}: {pre}level={self._level()}{post}>'
+
+    def __getitem__(self, _):
+        return self
+
+    def _parent(self):
+        return self.parent().parent().parent()  # ^_^
+
+    def _ancestors(self):
+        manager = self
+        while parent := manager._parent():
+            yield parent
+            manager = parent
+
+    def _root(self):
+        if self._parent():
+            *_, root = self._ancestors()
+            return root
+        return self
+
+    def _level(self):
+        return len(list(self._ancestors()))
+
+    _depth = _level
+
+    def _siblings(self):
+        return tuple(set(parent) - {self}) if (parent := self._parent()) else ()
+
+    def _is_active(self):
+        return (parent._active() is self) if (parent := self._parent()) else True
+
+    def _index(self):
+        # index of this manager widget wrt root node
+        indices = []
+        manager = self
+        while parent := manager._parent():
+            indices.append(parent.tabs.indexOf(manager))
+            manager = parent
+        return indices[::-1]
+
+    def _height(self):
+        return 0
+
+    def is_leaf(self):
+        return self._height() == 0
+
+
+class MplTabbedFigure(TabNode):
+
+    plot = None
 
     def __init__(self, figure, parent=None):
         QtWidgets.QWidget.__init__(self, parent)
@@ -80,13 +137,37 @@ class MplTabbedFigure(QtWidgets.QWidget):
         self.vbox.addWidget(canvas)
         self.setLayout(self.vbox)
 
-#
+    def add_callback(self, func):
+        # connect plot callback
+        if not (func and callable(func)):
+            self.logger.debug('Invalid object for callback: {}', func)
+            return
+
+        # add plot function
+        self.logger.debug('Attaching callback to {}: {}', self, pp.caller(func))
+        self.plot = func
+
+    def _plot(self, *args, **kws):
+
+        # self._root()._index(self)
+        indices = list(self._index())
+        self.logger.debug('Checking if plot needed: {}', indices)
+
+        if self.figure.axes:
+            self.logger.debug('Plot {} already initialized.', indices)
+            return
+
+        if not self.plot:
+            self.logger.debug('No plot method defined for {}.', indices)
+            return
+
+        self.logger.debug('Creating plot {}.', indices)
+        return self.plot(self.figure, indices, *args, **kws)
 
 
-class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
+class TabManager(TabNode):
 
     _tab_name_template = 'Tab {}'
-    plot = None
 
     def __init__(self, figures=(), pos='N', parent=None):
 
@@ -94,8 +175,9 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
         self._items = {}
         self.tabs = QtWidgets.QTabWidget(self)
         #
-        self._cid_focus_match = None
-
+        self._cid = None
+        self._link_focus = False
+        self._previous = -1
         #
         self._layout(pos)
 
@@ -131,25 +213,30 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
             self.tabs.setTabEnabled(0, False)
             # tabs.setTabVisible(0, False)
 
-    def __repr__(self):
-        pre = post = ''
-        if parent := self._parent():
-            index = parent.tabs.indexOf(self)
-            name = parent.tabs.tabText(index)
-            pre = f'{name!r}, '
-            post = f', {index=}'
-        return f'<{self.__class__.__name__}: {pre}level={self._level()}{post}>'
-
     def __len__(self):
         return self.tabs.count() - self.index_offset
 
     def __getitem__(self, key):
 
+        if key is ...:
+            return tuple(self)
+
+        if key == '*':
+            return self._active()
+
+        if isinstance(key, tuple):
+            # reduce
+            if (n := len(key)) > (h := self._height()):
+                raise IndexError(f'Invalid number of indices {n} for {self!r} '
+                                 f'with {h} levels.')
+            i, *key = key
+            return self[i][tuple(key)]
+
         if not isinstance(key, numbers.Integral):
             return self._items[key]
+        # raise TypeError(f'Invalid type object ({key}) for indexing {self!r}')
 
         n = len(self)
-        key = key
         if key >= n or key < -n:
             raise IndexError(f'Index {key} out of range for '
                              f'{self.__class__.__name__} with {n} tabs.')
@@ -163,137 +250,61 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
         self.add_tab(tab_name, fig=figure)
 
     # ------------------------------------------------------------------------ #
-    @property
-    def index_offset(self):
-        return int(self.pos == 'W')
-
-    def _index_up(self):
-        # index of this manager widget wrt MplMultiTab
-        indices = []
-        manager = self
-        while parent := manager._parent():
-            indices.append(parent.tabs.indexOf(manager))
-            manager = parent
-        return indices[::-1]
-
-    def _current_index(self):
-        return (self.tabs.currentIndex() - self.index_offset, )
-
-    def _parent(self):
-        return self.parent().parent().parent()  # ^_^
-
-    def _ancestors(self):
-        manager = self
-        while parent := manager._parent():
-            yield parent
-            manager = parent
-
-    def _root(self):
-        *_, root = self._ancestors()
-        return root
-
-    def _level(self):
-        return len(list(self._ancestors()))
-
-    def _height(self):
-        return len(list(self._current_index()))
-
-    # def _descendants(self):
-    #     return
-
-    # # alias
-    # _descendents = _descendants
-
-    def _siblings(self):
-        return tuple(set(parent) - {self}) if (parent := self._parent()) else ()
-
-    def _is_active(self):
-        return (parent._active() is self) if (parent := self._parent()) else True
-
     def _active(self):
         return self.tabs.currentWidget()
 
     def _inactive(self):
         return self._active()._siblings()
 
-    # ------------------------------------------------------------------------ #
-    def set_focus(self, i):
-        self.tabs.setCurrentIndex(i + self.index_offset)
+    @property
+    def index_offset(self):
+        return int(self.pos in 'EW')
 
-    def link_focus(self):
-        if self._cid_focus_match:
-            self.logger.debug('Focus matching already active on {}. Nothing to '
-                              'do here.', self)
-            return
+    def _current_index(self):
+        return (self.tabs.currentIndex() - self.index_offset, )
 
-        self.logger.debug('Adding callback {} to group: {!r}',
-                          pp.caller(self._match_focus), self)
-        self._cid_focus_match = self.tabs.currentChanged.connect(self._match_focus)
+    def _height(self):
+        return len(tuple(self._current_index()))
 
-    def unlink_focus(self):
-        if not self._cid_focus_match:
-            self.logger.debug('No focus matching active on {!r}. Nothing to do '
-                              'here.', self)
-            return
+    # def _children(self):
+    #     return ()
 
-        self.logger.debug('Removing focus callback from group: {!r}', self)
-        self.tabs.currentChanged.disconnect(self._cid_focus_match)
-        self._cid_focus_match = None
+    # def _descendants(self):
+    #     yield
 
-    def _match_focus(self, i):
-        i = i - self.index_offset
-        self.logger.debug('Callback {!r}: {}', self, i)
-
-        *current, _ = self._index_up()
-        self.logger.debug('Current: {}', [*current, _])
-
-        # disonnect parent callbacks
-        self.logger.debug('Unlinking focus at active toplevel.')
-        root = self._root()
-        toplevel = root._active()
-        toplevel.unlink_focus()
-        root.set_focus(*current, None)
-
-        focus = (*current, i)
-        self.logger.debug('Callback setting {!r} sibling focus to: {}',
-                          self, focus)
-        for mgr in self._siblings():
-            mgr.set_focus(i)
-
-        self.logger.debug('Linking focus at active toplevel.')
-        toplevel.link_focus()
-
-        # for mgr, idx in zip(branch[::-1], current
-
-        # for mgr, idx in zip(branch, current[::-1]):
-
-        # for mgr, idx in zip(branch, current[::-1]):  # bottom up
-        #     if next(mgr._current_index()) != idx:
-        #         # disconnect focus callback
-        #         if mgr._cid_focus_match:
-        #             mgr.unlink_focus()
-
-        #         self.logger.debug('{}: {}', mgr, idx)
-        #         mgr.tabs.setCurrentIndex(idx)
-        #         mgr.link_focus()
-
-        # focus = (*current, i)
-        # self.logger.debug('Callback setting {!r} inactive parents focus to: {}',
-        #                   self, focus)
-        # for mgr in self._root()._inactive():
-        #     mgr.set_focus(*focus)
+    # # alias
+    # _descendents = _descendants
 
     # ------------------------------------------------------------------------ #
-
     def add_callback(self, func):
         # connect plot callback
         if not (func and callable(func)):
             self.logger.debug('Invalid object for callback: {}', func)
             return
 
-        self.logger.debug('Adding callback: {}', pp.caller(func))
-        self.plot = func
-        self.tabs.currentChanged.connect(self._plot)
+        # Connect function
+        self.logger.debug('Adding callback to {}: {}', self, pp.caller(self._on_change))
+        self._cid = self.tabs.currentChanged.connect(self._on_change)
+
+        # propagate down
+        for node in self:
+            node.add_callback(func)
+
+    def remove_callback(self, cid):
+        return self.tabs.currentChanged.disconnect(cid)
+
+    def _on_change(self, i):
+        self.logger.debug('Tab change {}', i)
+
+        # focus
+        if self._link_focus:
+            self._match_focus(i)
+
+        # plot init for next active tab
+        if self._is_active() and (fig := self[i]).plot:
+            fig._plot()
+
+    # ------------------------------------------------------------------------ #
 
     def add_tab(self, name=None, *, fig=None, focus=True):
         """
@@ -318,26 +329,61 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
 
         return fig
 
+    def remove_tab(self, key):
+        node = self[key]
+        return node.tabs.remove(node.tabs.indexOf(node))
+
     # ------------------------------------------------------------------------ #
-    def get_figure(self, i):
-        return self[i].figure
+    def set_focus(self, i):
+        self.tabs.setCurrentIndex(i + self.index_offset)
 
-    def _plot(self, i, *args, **kws):
-        self.logger.debug('Checking if plot needed: {!r}', i)
+    def link_focus(self):
+        if self._cid:
+            if self._link_focus:
+                self.logger.debug('Focus matching already active on {}. Nothing to '
+                                  'do here.', self)
+                return
 
-        indices = [*self._index_up(), i]
-        if (fig := self.get_figure(indices)).axes:
-            self.logger.debug('Plot {!r} already initialized.', i)
+            self._link_focus = True
             return
 
-        if not self.plot:
-            self.logger.debug('No plot method defined.')
+        self.logger.debug('Adding callback {} to group: {!r}',
+                          pp.caller(self._on_change), self)
+        self._cid = self.tabs.currentChanged.connect(self._on_change)
+        self._link_focus = True
+
+    def unlink_focus(self):
+        if not (self._cid and self._link_focus):
+            self.logger.debug('No focus matching active on {!r}. Nothing to do '
+                              'here.', self)
             return
 
-        
-        self.logger.debug('Creating plot {!r}.', indices)
-        return self.plot(fig, indices, *args, **kws)
+        self._link_focus = False
 
+    def _match_focus(self, i):
+        i = i - self.index_offset
+        self.logger.debug('Callback {!r}: {}', self, i)
+
+        *current, _ = self._index()
+        self.logger.debug('Current: {}', [*current, _])
+
+        # disonnect parent callbacks
+        self.logger.debug('Unlinking focus at active toplevel.')
+        root = self._root()
+        toplevel = root._active()
+        toplevel.unlink_focus()
+        root.set_focus(*current, None)
+
+        focus = (*current, i)
+        self.logger.debug('Callback setting {!r} sibling focus to: {}',
+                          self, focus)
+        for mgr in self._siblings():
+            mgr.set_focus(i)
+
+        self.logger.debug('Reconnecting focus matching at active toplevel.')
+        toplevel.link_focus()
+
+    # ------------------------------------------------------------------------ #
     def save(self, filenames=(), folder='', **kws):
         """
 
@@ -357,21 +403,19 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
             return
 
         folder = Path(folder)
-
         for i, filename in enumerate(self._check_filenames(filenames)):
             if not (filename := Path(filename)).is_absolute():
                 filename = folder / filename
 
-            figure = self[self.tabs.tabText(i)].canvas.figure
-            figure.savefig(filename.resolve(), **kws)
+            self[i].figure.savefig(filename.resolve(), **kws)
 
     save_figures = save
 
     def _check_filenames(self, filenames):
         n = self.tabs.count()
         if is_template_string(filenames):
-            logger.info('Saving {} figures with filename template: {!r}',
-                        n, filenames)
+            self.logger.info('Saving {} figures with filename template: {!r}',
+                             n, filenames)
             # partial format string with dataset name
             return ((filenames.format(self.tabs.tabText(_))) for _ in range(n))
 
@@ -394,8 +438,10 @@ class TabManager(QtWidgets.QWidget, LoggingMixin):  # TabNode # QTabWidget??
 
 
 class NestedTabsManager(TabManager):
+
     _tab_name_template = 'Group {}'
     # _filename_template = '{:s}-{:s}.png'
+    plot = False
 
     def __new__(cls, figures, *args, **kws):
         # catch for figures being 1d sequence or mapping, use plain TabManager
@@ -408,9 +454,6 @@ class NestedTabsManager(TabManager):
 
         # initialise empty
         TabManager.__init__(self, (), pos, parent)
-        #
-        self._previous = -1
-        self._cid_otc = None
 
         # tabs switches the group being displayed in central panel which may
         # itself be NestedTabsManager or TabManager at lowest level
@@ -426,72 +469,46 @@ class NestedTabsManager(TabManager):
 
         # if figures:
         #     self.link_focus()
-
-    # ------------------------------------------------------------------------ #        
-    def get_figure(self, key):
+    
+    # ------------------------------------------------------------------------ #
+    def _get_item(self, key):
         obj = self
         for k in key:
             obj = obj[k]
-        return obj.figure
-
-
-    def _current(self):
-        widget = self
-        while not isinstance(widget, MplTabbedFigure):
-            i = widget.tabs.currentIndex() - self.index_offset
-            widget = widget.tabs.currentWidget()
-            yield i, widget
+        return obj
 
     def _current_index(self):
-        for i, _ in self._current():
-            yield i
+        for node in (self, *self._active_branch()):
+            yield node.tabs.currentIndex() - node.index_offset
 
-    # def _descendants(self):
-    #     for mgr in self:
-    #         yield mgr
-    #         yield from mgr.descendants()
+    def _active_branch(self):
+        node = self
+        while (child := node._active())._height():
+            yield child
+            node = child
 
     # ------------------------------------------------------------------------ #
 
-    # def add_callback(self, func):
-
-    #     if not self._is_active():
-    #         return
-
-    #     # Connect method that plots active figure
-    #     self.logger.debug('Adding callback to active group: {}',
-    #                       pp.caller(self._on_tab_change))
-    #     self._cid_otc = self.tabs.currentChanged.connect(self._on_tab_change)
-
-        # propagate down
-        # for mgr, self._current_index())
-        # for mgr in self:
-        #     mgr.add_callback(func)
-
-    def remove_callback(self, cid):
-        return self.tabs.currentChanged.disconnect(cid)
-
-    def _on_tab_change(self, i):
+    def _on_change(self, i):
         # This will run *before* qt switches the tabs on mouse click
-        before = [tuple(q._current_index()) for q in self]
+        self.logger.debug('Tab change callback level {}. CURRENT indices: {}',
+                          self._level(), [tuple(q._current_index()) for q in self])
 
-        self.logger.info('Tab change callback level {}! CURRENT indices:{}',
-                         self._level(), before)
+        i = i - self.index_offset
+        logger.debug('{!r} {}', self, i)
+        # disconnect callback from previously active tab
+        if self._previous == -1:  # first change
+            current = [0] * self._height()
+        else:
+            # turn of the focus linking for inactive groups else infinite loop
+            self.logger.debug('Unlinking previous {}', self._previous)
+            previous = self.tabs.widget(self._previous + self.index_offset)
+            previous.unlink_focus()
+            current = tuple(previous._current_index())
+        self._previous = i
 
-        # if self._cid_focus_match:
-
-        after = [tuple(q._current_index()) for q in self]
-        self.logger.info('AFTER Tab change callback indices:\n{}', after)
-
-        # do plot
-        self._plot_active_tab(i)
-
-    def _plot_active_tab(self, i):
-        self.logger.debug('Plot callback initiated by group switch. New group is {}', i)
-        #
-        indices, (*_, active_mgr, _) = zip(*self._current())
-        self.logger.debug('new index: {}', indices)
-        active_mgr._plot(indices[-1])
+        # self.logger.debug()
+        super()._on_change((i, *current))
 
     # ------------------------------------------------------------------------ #
     def add_tab(self, *keys, fig=None, focus=True):
@@ -510,7 +527,7 @@ class NestedTabsManager(TabManager):
                            (fig or {}).get(gid, ()),
                            kls=TabManager if (len(keys) == 1) else type(self))
 
-        return self[gid].add_tab(*keys, fig=fig, focus=not self.plot)
+        return self[gid].add_tab(*keys, fig=fig, focus=focus)
 
     def add_group(self, name=None, figures=(), kls=None):
         """
@@ -543,34 +560,24 @@ class NestedTabsManager(TabManager):
         self.tabs.setCurrentIndex(idx := i + self.index_offset)
         self._previous = idx
 
-        itr = self if self._cid_focus_match else [self._active()]
+        itr = self if self._link_focus else [self._active()]
         for mgr in itr:
             mgr.set_focus(*indices)
 
     def _match_focus(self, i):
-        i = i - self.index_offset
-        logger.debug('{!r} {}', self, i)
-        # disconnect callback from previously active tab
-        if self._previous != -1:
-            previous = self.tabs.widget(self._previous + self.index_offset)
-            previous.unlink_focus()
-            current = list(previous._current_index())
-        else:
-            current = [0] * self._height()
-        self._previous = i
 
         # set focus of the new target group same as previous
+        i, *new = i
         target = self[i]
-        self.logger.debug('{!r} matching target group {} focus with current: {}',
-                          self, i, current)
-        target.set_focus(*current)
+        self.logger.debug('{!r} matching target group {} focus with new: {}',
+                          self, i, new)
+        target.set_focus(*new)
 
         #  also set focus of siblings
-        focus = i, *current
-        self.logger.debug('{!r} matching sibling groups focus with current: {}',
-                          self, focus)
+        self.logger.debug('{!r} matching sibling groups focus with : {}',
+                          self, [i, *new])
         for mgr in self._siblings():
-            mgr.set_focus(*focus)
+            mgr.set_focus(i, *new)
 
         # add focus linking callback to new group
         target.link_focus()
@@ -646,7 +653,7 @@ class MplTabGUI(QtWidgets.QMainWindow):
         self.tabs.set_focus(*indices)
 
     def add_callback(self, func):
-        return self.tabs.add_callback(func)
+        self.tabs.add_callback(func)
 
 
 # aliases
@@ -675,7 +682,6 @@ class MplMultiTab(MplTabGUI):
 
     def link_focus(self):
         self.tabs.link_focus()
-        # self.tabs.add_callback()
 
 
 class MplMultiTab2D(MplMultiTab):
