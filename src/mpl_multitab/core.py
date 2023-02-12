@@ -105,7 +105,7 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         indices = []
         manager = self
         while parent := manager._parent():
-            indices.append(parent.tabs.indexOf(manager))
+            indices.append(parent._find(manager))
             manager = parent
         return indices[::-1]
 
@@ -127,7 +127,7 @@ class MplTabbedFigure(TabNode):
         self.figure = figure
         self.canvas = canvas = FigureCanvas(figure)
         canvas.setParent(self)
-        canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
+        canvas.setFocusPolicy(QtCore.Qt.StrongFocus)
 
         # Create the navigation toolbar
         navtool = NavigationToolbar(canvas, self)
@@ -271,21 +271,37 @@ class TabManager(TabNode):
         return (key % n) + self.index_offset
 
     # ------------------------------------------------------------------------ #
+    @property
+    def index_offset(self):
+        return int(self.pos in 'EW')
+
+    def _current_index(self):
+        return self.tabs.currentIndex() - self.index_offset
+
+    def _current_indices(self):
+        for node in (self, *self._active_branch()):
+            yield node._current_index()
+
+    def _find(self, item):
+        if (i := self.tabs.indexOf(item)) != -1:
+            i -= self.index_offset
+        return i
+
+    # ------------------------------------------------------------------------ #
     def _active(self):
         return self.tabs.currentWidget()
 
     def _inactive(self):
         return self._active()._siblings()
 
-    @property
-    def index_offset(self):
-        return int(self.pos in 'EW')
-
-    def _current_index(self):
-        return (self.tabs.currentIndex() - self.index_offset, )
+    def _active_branch(self):
+        node = self
+        while (child := node._active())._height():
+            yield child
+            node = child
 
     def _height(self):
-        return len(tuple(self._current_index()))
+        return len(tuple(self._current_indices()))
 
     # def _children(self):
     #     return ()
@@ -324,6 +340,10 @@ class TabManager(TabNode):
         # plot init for next active tab
         if self._is_active() and (fig := self[i]).plot:
             fig._plot()
+            
+            # if fig.figure._stale:
+            #     self.logger.info('DRAWING STALE FIGURE: {}', i)
+            #     fig.canvas.draw()
 
     # ------------------------------------------------------------------------ #
 
@@ -497,22 +517,12 @@ class NestedTabsManager(TabManager):
             obj = obj[k]
         return obj
 
-    def _current_index(self):
-        for node in (self, *self._active_branch()):
-            yield node.tabs.currentIndex() - node.index_offset
-
-    def _active_branch(self):
-        node = self
-        while (child := node._active())._height():
-            yield child
-            node = child
-
     # ------------------------------------------------------------------------ #
 
     def _on_change(self, i):
         # This will run *before* qt switches the tabs on mouse click
         self.logger.debug('Tab change callback level {}. CURRENT indices: {}',
-                          self._level(), [tuple(q._current_index()) for q in self])
+                          self._level(), [tuple(q._current_indices()) for q in self])
 
         i = i - self.index_offset
         logger.debug('{!r} {}', self, i)
@@ -521,14 +531,16 @@ class NestedTabsManager(TabManager):
             current = [0] * self._height()
         else:
             # turn of the focus linking for inactive groups else infinite loop
-            self.logger.debug('Unlinking previous {}', self._previous)
+            self.logger.debug('Unlinking previously active tab {}', self._previous)
             previous = self.tabs.widget(self._previous + self.index_offset)
             previous.unlink_focus()
-            current = tuple(previous._current_index())
+            current = tuple(previous._current_indices())
         self._previous = i
 
         # self.logger.debug()
         super()._on_change((i, *current))
+
+        self.logger.debug('Callback completed successfully.')
 
     # ------------------------------------------------------------------------ #
     def add_tab(self, *keys, fig=None, focus=True):
@@ -577,8 +589,8 @@ class NestedTabsManager(TabManager):
         if i is None:
             return
 
-        self.tabs.setCurrentIndex(idx := i + self.index_offset)
-        self._previous = idx
+        self.tabs.setCurrentIndex(i + self.index_offset)
+        self._previous = i
 
         itr = self if self._link_focus else [self._active()]
         for mgr in itr:

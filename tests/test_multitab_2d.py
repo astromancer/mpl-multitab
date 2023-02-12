@@ -25,9 +25,8 @@ def example_2d(n=100, colours='rgb', markers='123'):
         ax = fig.subplots()
         ax.scatter(*np.random.randn(2, n), color=c, marker=f'${m}$')
 
-    ui.link_focus()
     ui.set_focus(0, 0)
-
+    ui.link_focus()
     return ui
 
 
@@ -40,7 +39,7 @@ def example_2d(n=100, colours='rgb', markers='123'):
 
 def example_delay_draw(n=10_000, colours='rgb', markers='123'):
     #
-    ui = MplMultiTab()
+    ui = MplMultiTab(pos='W')
     # first create the figures, but don't do the plotting just yet
     for c, m in itt.product(colours, markers):
         ui.add_tab(f'Dataset {c.upper()}', f'Observation {m}')
@@ -51,19 +50,21 @@ def example_delay_draw(n=10_000, colours='rgb', markers='123'):
         i, j = indices
         ax = fig.subplots()
         return ax.scatter(*np.random.randn(2, n),
-                          color=colours[i],
-                          marker=f'${markers[j]}$')
-
+                            color=colours[i],
+                            marker=f'${markers[j]}$')
+    
     ui.add_callback(plot)   # add your plot worker
     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
     ui.link_focus()         # keep same tab in focus across group switches
     return ui
+
 
 # def test_delay_draw(qtbot):
 #     ui = example_delay_draw()
 #     ui.show()
 #     # register ui
 #     qtbot.addWidget(ui)
+    
 
 
 if __name__ == '__main__':
