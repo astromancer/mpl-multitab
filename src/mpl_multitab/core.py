@@ -172,7 +172,6 @@ class TabManager(TabNode):
     def __init__(self, figures=(), pos='N', parent=None):
 
         super().__init__(parent)
-        self._items = {}
         self.tabs = QtWidgets.QTabWidget(self)
         #
         self._cid = None
@@ -219,7 +218,7 @@ class TabManager(TabNode):
     def __getitem__(self, key):
 
         if key is ...:
-            return tuple(self)
+            return tuple(self.values())
 
         if key == '*':
             return self._active()
@@ -232,22 +231,44 @@ class TabManager(TabNode):
             i, *key = key
             return self[i][tuple(key)]
 
+        return self.tabs.widget(self._resolve_index(key))
+
+    def __setitem__(self, tab_name, figure):
+        if tab_name in self:
+            raise NotImplementedError
+
+        self.add_tab(tab_name, fig=figure)
+
+    def __delitem__(self, key):
+        self.tabs.removeTab(self._resolve_index(key))
+
+    def __contains__(self, key):
+        return key in self.keys()
+
+    def keys(self):
+        for i in range(self.index_offset, self.tabs.count()):
+            yield self.tabs.tabText(i)
+
+    def values(self):
+        for i in range(self.index_offset, self.tabs.count()):
+            yield self.tabs.widget(i)
+
+    def _resolve_index(self, key):
+        if isinstance(key, str):
+            for i, trial in enumerate(self.keys(), self.index_offset):
+                if key == trial:
+                    return i
+            raise KeyError(f'Could not resolve tab index {key!r}.')
+
         if not isinstance(key, numbers.Integral):
-            return self._items[key]
-        # raise TypeError(f'Invalid type object ({key}) for indexing {self!r}')
+            raise TypeError(f'Invalid type object ({key}) for indexing {self!r}.')
 
         n = len(self)
         if key >= n or key < -n:
             raise IndexError(f'Index {key} out of range for '
                              f'{self.__class__.__name__} with {n} tabs.')
 
-        return self.tabs.widget((key % n) + self.index_offset)
-
-    def __setitem__(self, tab_name, figure):
-        if tab_name in self._items:
-            raise NotImplementedError
-
-        self.add_tab(tab_name, fig=figure)
+        return (key % n) + self.index_offset
 
     # ------------------------------------------------------------------------ #
     def _active(self):
@@ -287,7 +308,7 @@ class TabManager(TabNode):
         self._cid = self.tabs.currentChanged.connect(self._on_change)
 
         # propagate down
-        for node in self:
+        for node in self.values():
             node.add_callback(func)
 
     def remove_callback(self, cid):
@@ -320,7 +341,7 @@ class TabManager(TabNode):
         if name is None:
             name = self._tab_name_template.format(self.tabs.count() - self.index_offset + 1)
 
-        self._items[name] = tab = MplTabbedFigure(fig)
+        tab = MplTabbedFigure(fig)
         self.tabs.addTab(tab, name)
 
         if focus:
@@ -330,12 +351,11 @@ class TabManager(TabNode):
         return fig
 
     def remove_tab(self, key):
-        node = self[key]
-        return node.tabs.remove(node.tabs.indexOf(node))
+        return self.tabs.remove(self.tabs.indexOf(self._resolve_index(key)))
 
     # ------------------------------------------------------------------------ #
-    def set_focus(self, i):
-        self.tabs.setCurrentIndex(i + self.index_offset)
+    def set_focus(self, key):
+        self.tabs.setCurrentIndex(self._resolve_index(key))
 
     def link_focus(self):
         if self._cid:
@@ -467,9 +487,9 @@ class NestedTabsManager(TabManager):
                               pp.caller(self.plot))
             self.add_callback(self, self.plot)
 
-        # if figures:
-        #     self.link_focus()
-    
+        if figures:
+            self.link_focus()
+
     # ------------------------------------------------------------------------ #
     def _get_item(self, key):
         obj = self
@@ -518,7 +538,7 @@ class NestedTabsManager(TabManager):
         self.logger.debug('Adding tab: {}', keys)
 
         gid, *keys = keys
-        if gid not in self._items:
+        if gid not in self:
             if not keys:
                 raise NotImplementedError
 
@@ -540,7 +560,7 @@ class NestedTabsManager(TabManager):
         self.logger.debug(f'Adding group {name!r}')
 
         kls = kls or type(self)
-        self._items[name] = nested = kls(figures, parent=self)
+        nested = kls(figures, parent=self)
         self.tabs.addTab(nested, name)
 
         if i == self.index_offset:

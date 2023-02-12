@@ -54,9 +54,9 @@ def example_delay_draw(n=10_000, colours='rgb', markers='123'):
                           color=colours[i],
                           marker=f'${markers[j]}$')
 
-    ui.link_focus()         # link focus tabs between groups
-    ui.add_callback(plot)   # add your worker
+    ui.add_callback(plot)   # add your plot worker
     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
+    ui.link_focus()         # keep same tab in focus across group switches
     return ui
 
 # def test_delay_draw(qtbot):
@@ -68,7 +68,7 @@ def example_delay_draw(n=10_000, colours='rgb', markers='123'):
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
+    # ui = example_2d()
     ui = example_delay_draw()
-    # ui = test_delay_draw()
     ui.show()
     sys.exit(app.exec_())

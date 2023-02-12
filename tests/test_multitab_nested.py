@@ -15,70 +15,76 @@ sys.modules['matplotlib.pyplot'] = None
 
 
 COLOURS = 'rgb'
-MARKERS = 'd*P'
-HATCH = ('xxx', 'ooo')
+MARKERS = 'H*P'
+HATCH = ('xx', '**')
 
 
 def example_nd(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
-    # Example use for MplTabs2D
-    # This dataset is equal number observations per dataset. This need not be the
-    # case in general.
+    # MplMultiTab with 3 tab levels
 
     ui = MplMultiTab()
 
     for c, m, h in itt.product(colours, markers, hatch):
-        fig = ui.add_tab(f'Colour {c.upper()}', f'Marker {m}', f'Hatch {h}')
+        # use "&" to tag letters for keyboard shortcuts which select the tab 
+        #   eg: using "&x" somewhere in the tab name means you can select it with "Alt+x"
+        fig = ui.add_tab(f'Colour &{c.upper()}', f'Marker &{m}', f'Hatch &{h}')
         ax = fig.subplots()
-        ax.scatter(*np.random.randn(2, n), edgecolor=c, marker=m, hatch=h,
-                   s=750, facecolor='none')
+        ax.scatter(*np.random.randn(2, n), 
+                   s=750, marker=m, hatch=h,
+                   edgecolor=c,  facecolor='none')
 
     ui.link_focus()
     ui.set_focus(0, 0, 0)
-    # from IPython import embed
-    # embed(header="Embedded interpreter at 'tests/test_multitab_nested.py':36")
-    assert np.equal([tuple(q._current_index()) for q in ui], 0).all()
+    # assert np.equal([tuple(q._current_index()) for q in ui], 0).all()
 
     return ui
-
-
-def example_delay_plot(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
-    # Example use for MplTabs2D
-    # This dataset is equal number observations per dataset. This need not be the
-    # case in general.
-
-    ui = MplMultiTab()
-
-    for c, m, h in itt.product(colours, markers, hatch):
-        fig = ui.add_tab(f'Colour {c.upper()}', f'Marker {m}', f'Hatch {h}')
-        ax = fig.subplots()
-        ax.scatter(*np.random.randn(2, n), edgecolor=c, marker=m, hatch=h,
-                   s=750, facecolor='none')
-
-    ui.link_focus()
-    ui.set_focus(0, 0, 0)
-    return ui
-
 
 def example_figures_predefined(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
-    # Example use for MplTabs2D
-    # This dataset is equal number observations per dataset. This need not be the
-    # case in general.
+    # MplMultiTab with 3 tab levels, initialised from a predefined collection
+    # of figures that define the tab structure
 
     figures = defaultdict(lambda: defaultdict(dict))
     for c, m, h in itt.product(colours, markers, hatch):
         fig = Figure()
         ax = fig.subplots()
-        ax.scatter(*np.random.randn(2, n), edgecolor=c, marker=m, hatch=h,
-                   s=750, facecolor='none')
+        ax.scatter(*np.random.randn(2, n),
+                   s=750, marker=m, hatch=h,
+                   edgecolor=c,  facecolor='none')
         figures[f'Colour {c.upper()}'][f'Marker {m}'][f'Hatch {h}'] = fig
 
-    ui.link_focus()
     return MplMultiTab(figures)
+
+def example_delay_plot(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
+    # MplMultiTab with 3 tab levels, delayed plotting
+
+    ui = MplMultiTab()
+
+    for c, m, h in itt.product(colours, markers, hatch):
+        ui.add_tab(f'Colour {c.upper()}', f'Marker {m}', f'Hatch {h}')
+
+    # create plotting function
+    def plot(fig, indices):
+        print('Doing plot:', indices)
+        i, j, k = indices
+        ax = fig.subplots()
+        return ax.scatter(*np.random.randn(2, n),
+                          s=750, marker=markers[j], hatch=hatch[k],
+                          edgecolor=colours[i],  facecolor='none')
+
+    ui.add_callback(plot)   # add your plot worker
+    ui.set_focus(0, 0, 0)   # this will trigger the plotting for group 0 tab 0
+    ui.link_focus()         # keep same tab in focus across group switches
+
+    return ui
+
+
+
 
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    ui = example_nd()
-    # ui = test_figures_predef()
+    # ui = example_nd()
+    ui = example_delay_plot()
+    # ui = example_figures_predefined()
     ui.show()
     sys.exit(app.exec_())
