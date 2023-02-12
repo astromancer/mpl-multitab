@@ -136,6 +136,8 @@ class MplTabbedFigure(TabNode):
         self.vbox.addWidget(navtool)
         self.vbox.addWidget(canvas)
         self.setLayout(self.vbox)
+        
+        self._drawn = False
 
     def add_callback(self, func):
         # connect plot callback
@@ -162,7 +164,13 @@ class MplTabbedFigure(TabNode):
             return
 
         self.logger.debug('Creating plot {}.', indices)
+        self._cid_draw0 = self.canvas.mpl_connect('draw_event', self._on_draw)
         return self.plot(self.figure, indices, *args, **kws)
+    
+    def _on_draw(self, event):
+        self._drawn = True
+        self.canvas.mpl_disconnect(self._cid_draw0)
+        
 
 
 class TabManager(TabNode):
@@ -341,9 +349,9 @@ class TabManager(TabNode):
         if self._is_active() and (fig := self[i]).plot:
             fig._plot()
             
-            # if fig.figure._stale:
-            #     self.logger.info('DRAWING STALE FIGURE: {}', i)
-            #     fig.canvas.draw()
+            if not fig._drawn:
+                self.logger.debug('Drawing figure: {}', i)
+                fig.canvas.draw()
 
     # ------------------------------------------------------------------------ #
 
@@ -518,7 +526,6 @@ class NestedTabsManager(TabManager):
         return obj
 
     # ------------------------------------------------------------------------ #
-
     def _on_change(self, i):
         # This will run *before* qt switches the tabs on mouse click
         self.logger.debug('Tab change callback level {}. CURRENT indices: {}',
