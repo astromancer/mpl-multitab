@@ -19,9 +19,8 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt import (
     NavigationToolbar2QT as NavigationToolbar)
 
-# local
-import recipes.pprint as pp
-from recipes.logging import LoggingMixin
+# relative
+from ._logging import LoggingMixin
 
 
 # ---------------------------------------------------------------------------- #
@@ -162,7 +161,7 @@ class MplTabbedFigure(TabNode):
             return
 
         # add plot function
-        self.logger.debug('Attaching callback to {}: {}', self, pp.caller(func))
+        self.logger.debug('Attaching callback to {}: {}', self, func)
         self.plot = func
 
     def _plot(self, *args, **kws):
@@ -340,7 +339,7 @@ class TabManager(TabNode):
             return
 
         # Connect function
-        self.logger.debug('Adding callback to {}: {}', self, pp.caller(self._on_change))
+        self.logger.debug('Adding callback to {}: {}', self, self._on_change)
         self._cid = self.tabs.currentChanged.connect(self._on_change)
 
         # propagate down
@@ -408,7 +407,7 @@ class TabManager(TabNode):
             return
 
         self.logger.debug('Adding callback {} to group: {!r}',
-                          pp.caller(self._on_change), self)
+                          self._on_change, self)
         self._cid = self.tabs.currentChanged.connect(self._on_change)
         self._link_focus = True
 
@@ -524,7 +523,7 @@ class NestedTabsManager(TabManager):
         if self.plot:
             self.logger.debug('Detected figure initializer method {}. '
                               'Connecting group tab change callback to this method.',
-                              pp.caller(self.plot))
+                              self.plot)
             self.add_callback(self, self.plot)
 
         if figures:
