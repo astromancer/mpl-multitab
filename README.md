@@ -243,5 +243,5 @@ Contributions are welcome!
 # Version
 This project uses [semantic versioning](https://semver.org/). The latest version
 is
-* 0.1.0
+* 1.0.0
 
