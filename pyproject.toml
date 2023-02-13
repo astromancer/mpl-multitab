@@ -1,7 +1,61 @@
+[project]
+name = "mpl_multitab"
+description = "Tabbed figure manager for matplotlib using pyQt"
+authors = [
+    {name = "Hannes Breytenbach", email = "hannes@saao.ac.za"}
+]
+dynamic = ["version", "readme"]
+license = {text = "MIT"}
+requires-python = ">=3.8"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: 3.8",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/astromancer/mpl-multitab"
+"Bug Tracker" = "https://github.com/astromancer/mpl-multitab/issues"
+
+[project.optional-dependencies]
+tests = ["pytest", "pytest-qt"]
+
 [build-system]
+build-backend = "setuptools.build_meta"
 requires = [
-    "setuptools>=42",
+    "setuptools",
     "setuptools_scm[toml]>=3.4",
     "wheel",
+    "six"
 ]
-build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+readme = {file = "README.md"}
+version = {attr = "mpl_multitab._version.version"}
+
+[tool.setuptools_scm]
+write_to = "src/mpl_multitab/_version.py"
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+envlist = py38
+
+[testenv]
+# install testing framework
+# ... or install anything else you might need here
+passenv = DISPLAY XAUTHORITY
+deps = 
+    -rrequirements.txt
+    -rrequirements-dev.txt
+# run the tests
+# ... or run any other command line tool you need to run here
+commands = pytest {posargs} # substitute with tox positional arguments
+"""
