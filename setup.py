@@ -1,5 +1,5 @@
 """
-Universal build script for python project git repos
+Universal build script for python project git repos.
 """
 
 # std
