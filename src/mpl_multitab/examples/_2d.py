@@ -25,7 +25,6 @@ def example_2d(n=100, colours=COLOURS, markers=MARKERS):
     # case in general.
 
     ui = MplMultiTab(pos='W')
-
     for c, m in itt.product(colours, markers):
         fig = ui.add_tab(f'Dataset {c.upper()}', f'Observation {m}')
         ax = fig.subplots()
@@ -37,9 +36,10 @@ def example_2d(n=100, colours=COLOURS, markers=MARKERS):
 
 
 def example_delay_draw(n=10_000, colours=COLOURS, markers=MARKERS):
-    #
-    ui = MplMultiTab(pos='W')
+    # MplMultiTab with delayed plotting
+
     # first create the figures, but don't do the plotting just yet
+    ui = MplMultiTab(pos='W')
     for c, m in itt.product(colours, markers):
         ui.add_tab(f'Dataset {c.upper()}', f'Observation {m}')
 

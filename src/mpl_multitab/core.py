@@ -62,6 +62,8 @@ def depth(obj, _depth=0):
 
 
 class TabNode(QtWidgets.QWidget, LoggingMixin):
+
+    # ------------------------------------------------------------------------ #
     def __repr__(self):
         pre = post = ''
         if parent := self._parent():
@@ -73,6 +75,10 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
 
     def __getitem__(self, _):
         return self
+
+    # ------------------------------------------------------------------------ #
+    def _siblings(self):
+        return tuple(set(parent) - {self}) if (parent := self._parent()) else ()
 
     def _parent(self):
         return self.parent().parent().parent()  # ^_^
@@ -94,26 +100,36 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
 
     _depth = _level
 
-    def _siblings(self):
-        return tuple(set(parent) - {self}) if (parent := self._parent()) else ()
-
-    def _is_active(self):
-        return (parent._active() is self) if (parent := self._parent()) else True
-
-    def _index(self):
-        # index of this manager widget wrt root node
-        indices = []
-        manager = self
-        while parent := manager._parent():
-            indices.append(parent._find(manager))
-            manager = parent
-        return indices[::-1]
-
     def _height(self):
         return 0
 
     def is_leaf(self):
         return self._height() == 0
+
+    # ------------------------------------------------------------------------ #
+    def _active(self):
+        return None
+
+    def _active_branch(self):
+        yield self
+
+        node = self
+        while (node := node._active()):
+            yield node
+
+    def _is_active(self):
+        return (parent._active() is self) if (parent := self._parent()) else True
+
+    # ------------------------------------------------------------------------ #
+    def _rindex(self):
+        # index of this node widget wrt root node
+        child = self
+        for parent in self._ancestors():
+            yield parent._find(child)
+            child = parent
+
+    def _index(self):
+        return tuple(self._rindex())[::-1]
 
 
 class MplTabbedFigure(TabNode):
@@ -136,7 +152,7 @@ class MplTabbedFigure(TabNode):
         self.vbox.addWidget(navtool)
         self.vbox.addWidget(canvas)
         self.setLayout(self.vbox)
-        
+
         self._drawn = False
 
     def add_callback(self, func):
@@ -166,11 +182,10 @@ class MplTabbedFigure(TabNode):
         self.logger.debug('Creating plot {}.', indices)
         self._cid_draw0 = self.canvas.mpl_connect('draw_event', self._on_draw)
         return self.plot(self.figure, indices, *args, **kws)
-    
+
     def _on_draw(self, event):
         self._drawn = True
         self.canvas.mpl_disconnect(self._cid_draw0)
-        
 
 
 class TabManager(TabNode):
@@ -287,7 +302,10 @@ class TabManager(TabNode):
         return self.tabs.currentIndex() - self.index_offset
 
     def _current_indices(self):
-        for node in (self, *self._active_branch()):
+        if not (branch := tuple(self._active_branch())):
+            return
+
+        for node in branch[:-1]:
             yield node._current_index()
 
     def _find(self, item):
@@ -301,12 +319,6 @@ class TabManager(TabNode):
 
     def _inactive(self):
         return self._active()._siblings()
-
-    def _active_branch(self):
-        node = self
-        while (child := node._active())._height():
-            yield child
-            node = child
 
     def _height(self):
         return len(tuple(self._current_indices()))
@@ -348,7 +360,7 @@ class TabManager(TabNode):
         # plot init for next active tab
         if self._is_active() and (fig := self[i]).plot:
             fig._plot()
-            
+
             if not fig._drawn:
                 self.logger.debug('Drawing figure: {}', i)
                 fig.canvas.draw()
@@ -517,13 +529,6 @@ class NestedTabsManager(TabManager):
 
         if figures:
             self.link_focus()
-
-    # ------------------------------------------------------------------------ #
-    def _get_item(self, key):
-        obj = self
-        for k in key:
-            obj = obj[k]
-        return obj
 
     # ------------------------------------------------------------------------ #
     def _on_change(self, i):

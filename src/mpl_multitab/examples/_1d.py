@@ -12,12 +12,12 @@ from mpl_multitab import MplTabs, QtWidgets
 sys.modules['matplotlib.pyplot'] = None
 
 COLOURS = 'rgb'
-MARKERS = '123'
+
 # ---------------------------------------------------------------------------- #
 
 
-def example_basic(n=100, colours=COLOURS):
-    # Example use for MplTabs
+def example_1d(n=100, colours=COLOURS):
+    # Example use of MplTabs
     # Create a scatter plot of `n` random xy-points for each colour
     ui = MplTabs()
     for c in colours:
@@ -31,8 +31,8 @@ def example_basic(n=100, colours=COLOURS):
 
 def example_delay_draw(n=10_000, colours=COLOURS):
     #
-    ui = MplTabs()
     # first create the figures, but don't do the plotting just yet
+    ui = MplTabs()
     for c in colours:
         ui.add_tab(c)
 

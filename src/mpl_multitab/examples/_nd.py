@@ -24,9 +24,7 @@ HATCH = ('xx', '**')
 
 def example_nd(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
     # MplMultiTab with 3 tab levels
-
     ui = MplMultiTab()
-
     for c, m, h in itt.product(colours, markers, hatch):
         # use "&" to tag letters for keyboard shortcuts which select the tab
         #   eg: using "&x" somewhere in the tab name means you can select it with "Alt+x"
@@ -38,8 +36,6 @@ def example_nd(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
 
     ui.link_focus()             # keep same tab in focus across group switches
     ui.set_focus(0, 0, 0)
-    # assert np.equal([tuple(q._current_index()) for q in ui], 0).all()
-
     return ui
 
 
@@ -63,7 +59,6 @@ def example_delay_draw(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
     # MplMultiTab with 3 tab levels, delayed plotting
 
     ui = MplMultiTab()
-
     for c, m, h in itt.product(colours, markers, hatch):
         ui.add_tab(f'Colour {c.upper()}', f'Marker {m}', f'Hatch {h}')
 
@@ -79,7 +74,6 @@ def example_delay_draw(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
     ui.add_callback(plot)   # add your plot worker
     ui.set_focus(0, 0, 0)   # this will trigger the plotting for group 0 tab 0
     ui.link_focus()         # keep same tab in focus across group switches
-
     return ui
 
 
