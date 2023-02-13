@@ -9,12 +9,18 @@ import numpy as np
 # local
 from mpl_multitab import QtWidgets, MplMultiTab
 
+# ---------------------------------------------------------------------------- #
 # ensure we don't use pyplot
 sys.modules['matplotlib.pyplot'] = None
 
 
-def example_2d(n=100, colours='rgb', markers='123'):
-    # Example use for MplTabs2D
+COLOURS = 'rgb'
+MARKERS = '123'
+# ---------------------------------------------------------------------------- #
+
+
+def example_2d(n=100, colours=COLOURS, markers=MARKERS):
+    # Example use for MplMultiTab for 2d collection of data sets
     # This dataset is equal number observations per dataset. This need not be the
     # case in general.
 
@@ -30,14 +36,7 @@ def example_2d(n=100, colours='rgb', markers='123'):
     return ui
 
 
-# def test_2d(qtbot):
-#     ui = example_2d()
-#     ui.show()
-#     # register ui
-#     qtbot.addWidget(ui)
-
-
-def example_delay_draw(n=10_000, colours='rgb', markers='123'):
+def example_delay_draw(n=10_000, colours=COLOURS, markers=MARKERS):
     #
     ui = MplMultiTab(pos='W')
     # first create the figures, but don't do the plotting just yet
@@ -50,21 +49,13 @@ def example_delay_draw(n=10_000, colours='rgb', markers='123'):
         i, j = indices
         ax = fig.subplots()
         return ax.scatter(*np.random.randn(2, n),
-                            color=colours[i],
-                            marker=f'${markers[j]}$')
-    
+                          color=colours[i],
+                          marker=f'${markers[j]}$')
+
     ui.add_callback(plot)   # add your plot worker
     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
     ui.link_focus()         # keep same tab in focus across group switches
     return ui
-
-
-# def test_delay_draw(qtbot):
-#     ui = example_delay_draw()
-#     ui.show()
-#     # register ui
-#     qtbot.addWidget(ui)
-    
 
 
 if __name__ == '__main__':
