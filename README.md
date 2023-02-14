@@ -4,7 +4,7 @@
 
 <!-- 
 TODO
-[![Build Status](https://travis-ci.com/astromancer/mpl-multitab.svg?branch=master)](https://travis-ci.com/astromancer/mpl-multitab)
+[![Build Status](https://travis-ci.com/astromancer/mpl-multitab.svg?branch=main)](https://travis-ci.com/astromancer/mpl-multitab)
 [![Documentation Status](https://readthedocs.org/projects/mpl-multitab/badge/?version=latest)](https://mpl-multitab.readthedocs.io/en/latest/?badge=latest)
 [![PyPI](https://img.shields.io/pypi/v/mpl-multitab.svg)](https://pypi.org/project/mpl-multitab)
 [![GitHub](https://img.shields.io/github/license/astromancer/mpl-multitab.svg?color=blue)](https://mpl-multitab.readthedocs.io/en/latest/license.html)
@@ -125,7 +125,8 @@ this need not be the case in general.
 
 
 
-## Performance considerations: Delayed plotting
+## Performance considerations - Delayed plotting
+
 Creating all the figures in one go at startup may take unreasonably long if you
 have many figures or lots of data. This can be amortised by delaying the
 plotting of individual figures until the user switches to that tab. This is 
@@ -167,7 +168,8 @@ ui.show()
 
 The `MplMultiTab` class is able to handle nested tabs to any depth. The
 following example demonstrates the usage pattern for datasets grouped by 3
-different features:
+different features. The same pattern can be used to handle data of any
+dimensionality. Tabs all the way down!
 
 ```python
 # MplMultiTab with 3 tab levels
@@ -208,10 +210,10 @@ ui.show()
 
 # Test
 
-<!-- The [`test suite`](./tests) contains further examples of how
-`mpl-multitab` can be used.  Testing is done with `pytest`: -->
 Testing is done with [pytest-qt](https://github.com/pytest-dev/pytest-qt/). 
-This will run through all examples in the [examples](/examples) module:
+This will run through all examples in the
+ [examples](https://github.com/astromancer/mpl-multitab/tree/main/src/mpl_multitab/examples)
+module:
 ```shell
 pytest -vs tests/test_multitab.py
 ```
@@ -237,7 +239,7 @@ Contributions are welcome!
 
 # License
 
-* see [LICENSE](https://github.com/astromancer/mpl-multitab/blob/master/LICENSE)
+* see [LICENSE](https://github.com/astromancer/mpl-multitab/blob/main/LICENSE)
 
 
 # Version

@@ -8,7 +8,7 @@ dynamic = ["version", "readme"]
 license = {text = "MIT"}
 requires-python = ">=3.8"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
     "Intended Audience :: Education",
     "Programming Language :: Python :: 3.8",
@@ -37,7 +37,7 @@ requires = [
 where = ["src"]
 
 [tool.setuptools.dynamic]
-readme = {file = "README.md"}
+readme = {file = "README.md", content-type = "text/markdown"}
 version = {attr = "mpl_multitab._version.version"}
 
 [tool.setuptools_scm]
