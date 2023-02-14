@@ -1,5 +1,5 @@
 """
-Universal build script for python project git repos
+Universal build script for python project git repos.
 """
 
 # std
@@ -59,25 +59,27 @@ class Builder(build_py):
     # need this to exclude ignored files from the build archive
 
     def find_package_modules(self, package, package_dir):
-        if package_dir.endswith(gitignore.names):
+        # filter folders
+        if gitignore.match(package_dir) or gitignore.match(Path(package_dir).name):
             self.debug_print(f'(git)ignoring {package_dir}')
             return
 
         # package, module, files
-        *data, files = zip(*super().find_package_modules(package, package_dir))
-        data = dict(zip(files, zip(*data)))
-
-        for file in files:
-            if file in untracked:
-                self.debug_print(f'ignoring untracked: {file}')
+        info = super().find_package_modules(package, package_dir)
+        
+        for package, module, path in info:
+            # filter files
+            if path in untracked:
+                self.debug_print(f'ignoring untracked: {path}')
                 continue
 
-            if gitignore.match(file):
-                self.debug_print(f'(git)ignoring: {file}')
+            if gitignore.match(path):
+                self.debug_print(f'(git)ignoring: {path}')
                 continue
-
-            yield *data[file], file
-            # print(f'{package}: {file}')
+            
+            self.debug_print(f'FOUND: {package=}: {module=} {path=}')
+            yield package, module, path
+            
 
 
 class CleanCommand(Command):
