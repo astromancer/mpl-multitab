@@ -1,7 +1,60 @@
+[project]
+name = "{name}"
+description = "{description}"
+authors = [
+    {name = "Hannes Breytenbach", email = "hannes@saao.ac.za"}
+]
+dynamic = ["version", "readme"]
+license = {text = "MIT"}
+requires-python = ">={py_min_version}"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Intended Audience :: Education",
+    "Programming Language :: Python :: {py_min_version}",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux"
+]
+
+[project.urls]
+"Homepage" = "{url}"
+"Bug Tracker" = "{url}/issues"
+
+[project.optional-dependencies]
+tests = ["pytest"]
+
 [build-system]
+build-backend = "setuptools.build_meta"
 requires = [
-    "setuptools>=42",
+    "setuptools",
     "setuptools_scm[toml]>=3.4",
     "wheel",
+    "six"
 ]
-build-backend = "setuptools.build_meta"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.dynamic]
+readme = {file = "README.md", content-type = "text/markdown"}
+version = {attr = "{name}._version.version"}
+
+[tool.setuptools_scm]
+write_to = "src/{name}/_version.py"
+
+[tool.tox]
+legacy_tox_ini = """
+[tox]
+envlist = py38
+
+[testenv]
+# install testing framework
+# ... or install anything else you might need here
+deps = 
+    -rrequirements.txt
+    -rrequirements-dev.txt
+# run the tests
+# ... or run any other command line tool you need to run here
+commands = pytest {posargs} # substitute with tox positional arguments
+"""
