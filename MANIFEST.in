@@ -1,1 +1,1 @@
-exclude .gitignore .pylintrc .travis.yml
+exclude .gitignore .pylintrc .travis.yml README.stub build_readme.py tests/*.gif
