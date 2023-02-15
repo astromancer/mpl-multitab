@@ -346,7 +346,6 @@ class TabManager(TabNode):
             name = self._tab_name_template.format(
                 self.tabs.count() - self.index_offset + 1
             )
-
         # create figure if needed
         fig = fig or Figure()
 
@@ -356,16 +355,6 @@ class TabManager(TabNode):
 
         return name, MplTabbedFigure(fig, parent=self)
 
-    def _add_tab(self, name, obj, focus):
-        # add tab
-        self.logger.info('Adding tab {!r}', name)
-        self.tabs.addTab(obj, name)
-
-        if focus:
-            index = self.tabs.currentIndex() + 1
-            logger.debug('focussing on {}', index)
-            self.tabs.setCurrentIndex(index)
-
     def add_tab(self, name=None, *, fig=None, focus=True):
         """
         Dynamically add a tab with embedded matplotlib canvas.
@@ -374,8 +363,19 @@ class TabManager(TabNode):
         self._add_tab(name, obj, focus)
         return obj
 
+    def _add_tab(self, name, obj, focus):
+        # add tab
+        self.logger.debug('Adding tab {!r}', name)
+        self.tabs.addTab(obj, name)
+
+        if focus:
+            index = self.tabs.currentIndex() + 1
+            logger.debug('focussing on {}', index)
+            self.tabs.setCurrentIndex(index)
+
     def remove_tab(self, key):
         return self.tabs.remove(self.tabs.indexOf(self._resolve_index(key)))
+
     # ------------------------------------------------------------------------ #
 
     def add_callback(self, func):
@@ -411,41 +411,15 @@ class TabManager(TabNode):
                 fig.canvas.draw()
 
     # ------------------------------------------------------------------------ #
-    def _add_tab(self, name, obj, focus):
-        # set the default tab name
-        if name is None:
-            name = self._tab_name_template.format(
-                self.tabs.count() - self.index_offset + 1
-            )
-
-        # add tab
-        self.tabs.addTab(obj, name)
-
-        if focus:
-            index = self.tabs.currentIndex() + 1
-            logger.debug('focussing on {}', index)
-            self.tabs.setCurrentIndex(index)
-
-    def add_tab(self, name=None, *, fig=None, focus=True):
-        """
-        Dynamically add a tab with embedded matplotlib canvas.
-        """
-        self.logger.info('Adding tab {!r}', name)
-        fig = fig or Figure()
-
-        if plt := sys.modules.get('matplotlib.pyplot'):
-            plt.close(fig)
-
-        nested = MplTabbedFigure(fig, parent=self)
-        self._add_tab(name, nested, focus)
-        return fig
-
-    def remove_tab(self, key):
-        return self.tabs.remove(self.tabs.indexOf(self._resolve_index(key)))
-
-    # ------------------------------------------------------------------------ #
     def set_focus(self, key):
-        self.tabs.setCurrentIndex(self._resolve_index(key))
+        self.logger.debug('Focussing: {}. cid: {}, linking: {}',
+                         key, self._cid, self._link_focus)
+
+        if self._current_index() == (to := self._resolve_index(key)):
+            # This is needed so the initial plot is done w
+            self._on_change(key)
+        else:
+            self.tabs.setCurrentIndex(to)
 
     def link_focus(self):
         if self._cid:
@@ -524,7 +498,7 @@ class TabManager(TabNode):
     def _check_filenames(self, filenames):
         n = self.tabs.count()
         if is_template_string(filenames):
-            self.logger.info('Saving {} figures with filename template: {!r}',
+            self.logger.debug('Saving {} figures with filename template: {!r}',
                              n, filenames)
             # partial format string with dataset name
             return ((filenames.format(self.tabs.tabText(_))) for _ in range(n))
@@ -605,11 +579,8 @@ class NestedTabsManager(TabManager):
 
     # ------------------------------------------------------------------------ #
     def _factory(self, keys, fig):
-        n = len(keys)
 
-        if not n:
-            # imples 1d!
-            raise NotImplementedError
+        assert (n := len(keys))
 
         if n == 1:
             return super()._factory(*keys, fig)
@@ -623,7 +594,7 @@ class NestedTabsManager(TabManager):
         """
         Add a (nested) tab.
         """
-        self.logger.info('Adding tab: {}', keys)
+        self.logger.debug('Adding tab: {}', keys)
 
         gid, *other = keys
         if gid not in self:
@@ -652,7 +623,7 @@ class NestedTabsManager(TabManager):
         if i is None:
             return
 
-        self.tabs.setCurrentIndex(i + self.index_offset)
+        self.tabs.setCurrentIndex(self._resolve_index(i))
         self._previous = i
 
         itr = self if self._link_focus else [self._active()]
@@ -760,7 +731,7 @@ MplTabs = MplTabGui = MplTabGUI
 
 class MplMultiTab(MplTabGUI):
     """
-    Combination tabs for displaying matplotlib figures.
+    Nested tab gui for displaying matplotlib figures.
     """
 
     def __init__(self, figures=(), title=None, pos='N',

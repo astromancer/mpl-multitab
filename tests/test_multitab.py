@@ -1,7 +1,7 @@
 
 
 # std
-import operator as op, sys
+import operator as op
 import itertools as itt
 from collections import defaultdict
 
@@ -9,24 +9,23 @@ from collections import defaultdict
 import pytest
 import numpy as np
 from matplotlib.figure import Figure
-from mpl_multitab import MplMultiTab, MplTabs, QtCore, examples, QtWidgets
+from mpl_multitab import MplMultiTab, MplTabs, QtCore, examples
 
 
 # ---------------------------------------------------------------------------- #
 FEATURES = dict(
     color='rgb',
-    marker='H*P',
-    hatch=('xx', '**')
+    marker='hDP',
+    hatch=('xx', '*')
 )
 STYLE = dict(
-    s=750,
+    s=1000,
     facecolor='none'
 )
 STRUCT = {
     1: (dict, ()),
     2: (defaultdict, dict),
     3: (defaultdict, lambda: defaultdict(dict))
-    # dict, defaultdict
 }
 
 
@@ -138,20 +137,24 @@ def check_figure_drawn(ui, indices):
     assert ui[indices]._drawn
 
 
-def test_delay_draw(qtbot, level):
-    #
+def _make_ui(level):
     kls = MplTabs if level == 1 else MplMultiTab
     ui = kls()
-    
+
     for kws in generate_features(level):
         ui.add_tab(*kws.values())
-    
-    ui.add_callback(_plot)      # add plot worker
-    ui.set_focus(*([0] * level))   # trigger the plotting for [group 0, ...] tab 0
-    ui.link_focus()            # keep same tab in focus across group switches
+
+    ui.add_callback(_plot)        # add plot worker
+    ui.link_focus()               # keep same tab in focus across group switches
+    ui.set_focus(*([0] * level))  # trigger the plotting for [group 0, ...] tab 0
     ui.show()
-    # return ui
-    
+    return ui
+
+
+def test_delay_draw(qtbot, level):
+    #
+    ui = _make_ui(level)
+
     # register ui
     qtbot.addWidget(ui)
 
@@ -159,5 +162,9 @@ def test_delay_draw(qtbot, level):
     _test_cycle_tabs(qtbot, ui, check_figure_drawn)
 
 
-
-
+if __name__ == '__main__':
+    # app = QtWidgets.QApplication(sys.argv)
+    # ui = example_nd()
+    # ui = example_figures_predefined()
+    ui = _make_ui(3)
+    # sys.exit(app.exec_())
