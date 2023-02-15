@@ -8,6 +8,7 @@ from collections import defaultdict
 # third-party
 import pytest
 import numpy as np
+from loguru import logger
 from matplotlib.figure import Figure
 from mpl_multitab import MplMultiTab, MplTabs, QtCore, examples
 
@@ -33,6 +34,11 @@ STRUCT = {
 
 @pytest.fixture(params=range(1, 4))
 def level(request):
+    return request.param
+
+
+@pytest.fixture(params='NW')
+def pos(request):
     return request.param
 
 
@@ -70,12 +76,12 @@ def create_figures(level):
 
 # ---------------------------------------------------------------------------- #
 
-
 def _change_tab(qtbot, mgr, i):
     # simulate tab change through mouse interaction
     if i == mgr._current_index():
         return
 
+    logger.debug('Changing tab {} {}', mgr, i)
     tabs = mgr.tabs
     bar = tabs.tabBar()
     with qtbot.waitSignal(tabs.currentChanged, timeout=1000):
@@ -137,9 +143,9 @@ def check_figure_drawn(ui, indices):
     assert ui[indices]._drawn
 
 
-def _make_ui(level):
+def _make_ui(level, pos):
     kls = MplTabs if level == 1 else MplMultiTab
-    ui = kls()
+    ui = kls(pos=pos)
 
     for kws in generate_features(level):
         ui.add_tab(*kws.values())
@@ -151,20 +157,24 @@ def _make_ui(level):
     return ui
 
 
-def test_delay_draw(qtbot, level):
+def test_delay_draw(qtbot, level, pos, screenshot=False):
     #
-    ui = _make_ui(level)
+    ui = _make_ui(level, pos)
 
     # register ui
     qtbot.addWidget(ui)
+
+    if screenshot:
+        path = qtbot.screenshot(ui)
+        logger.info('Screenshot saved at: {}', path)
 
     # test
     _test_cycle_tabs(qtbot, ui, check_figure_drawn)
 
 
-if __name__ == '__main__':
-    # app = QtWidgets.QApplication(sys.argv)
-    # ui = example_nd()
-    # ui = example_figures_predefined()
-    ui = _make_ui(3)
-    # sys.exit(app.exec_())
+# if __name__ == '__main__':
+#     app = QtWidgets.QApplication(sys.argv)
+#     # ui = example_nd()
+#     # ui = example_figures_predefined()
+#     ui = _make_ui(2, 'W')
+#     sys.exit(app.exec_())

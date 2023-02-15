@@ -395,15 +395,18 @@ class TabManager(TabNode):
     def remove_callback(self, cid):
         return self.tabs.currentChanged.disconnect(cid)
 
-    def _on_change(self, i):
-        self.logger.debug('Tab change {}', i)
+    def _on_change(self, *indices):
+        self.logger.debug('Tab change {}', indices)
 
         # focus
         if self._link_focus:
-            self._match_focus(i)
+            self._match_focus(*indices)
 
         # plot init for next active tab
-        if self._is_active() and (fig := self[i]).plot:
+        i, *indices = indices
+        indices = (i - self.index_offset, *indices)
+
+        if self._is_active() and (fig := self[indices]).plot:
             fig._plot()
 
             if not fig._drawn:
@@ -413,13 +416,8 @@ class TabManager(TabNode):
     # ------------------------------------------------------------------------ #
     def set_focus(self, key):
         self.logger.debug('Focussing: {}. cid: {}, linking: {}',
-                         key, self._cid, self._link_focus)
-
-        if self._current_index() == (to := self._resolve_index(key)):
-            # This is needed so the initial plot is done w
-            self._on_change(key)
-        else:
-            self.tabs.setCurrentIndex(to)
+                          key, self._cid, self._link_focus)
+        self.tabs.setCurrentIndex(self._resolve_index(key))
 
     def link_focus(self):
         if self._cid:
@@ -499,7 +497,7 @@ class TabManager(TabNode):
         n = self.tabs.count()
         if is_template_string(filenames):
             self.logger.debug('Saving {} figures with filename template: {!r}',
-                             n, filenames)
+                              n, filenames)
             # partial format string with dataset name
             return ((filenames.format(self.tabs.tabText(_))) for _ in range(n))
 
@@ -557,10 +555,9 @@ class NestedTabsManager(TabManager):
     # ------------------------------------------------------------------------ #
     def _on_change(self, i):
         # This will run *before* qt switches the tabs on mouse click
-        self.logger.debug('Tab change callback level {}. CURRENT indices: {}',
-                          self._level(), [tuple(q._current_indices()) for q in self])
+        self.logger.debug('Tab change callback level {}.', self._level())
 
-        i = i - self.index_offset
+        upcoming = i - self.index_offset
         logger.debug('{!r} {}', self, i)
         # disconnect callback from previously active tab
         if self._previous == -1:  # first change
@@ -571,10 +568,10 @@ class NestedTabsManager(TabManager):
             previous = self.tabs.widget(self._previous + self.index_offset)
             previous.unlink_focus()
             current = tuple(previous._current_indices())
-        self._previous = i
+        self._previous = upcoming
 
         #
-        super()._on_change((i, *current))
+        super()._on_change(i, *current)
         self.logger.debug('Callback completed successfully.')
 
     # ------------------------------------------------------------------------ #
@@ -630,10 +627,11 @@ class NestedTabsManager(TabManager):
         for mgr in itr:
             mgr.set_focus(*indices)
 
-    def _match_focus(self, i):
+    def _match_focus(self, *indices):
 
         # set focus of the new target group same as previous
-        i, *new = i
+        i, *new = indices
+        i -= self.index_offset
         target = self[i]
         self.logger.debug('{!r} matching target group {} focus with new: {}',
                           self, i, new)
@@ -723,6 +721,12 @@ class MplTabGUI(QtWidgets.QMainWindow):
 
     def link_focus(self):
         pass  # only meaningful for MultiTab
+
+    def show(self):
+        # This is needed so the initial plot is done when launching the gui
+        mgr = self.tabs
+        mgr._on_change(mgr.tabs.currentIndex())
+        return super().show()
 
 
 # aliases
