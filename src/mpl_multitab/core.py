@@ -61,6 +61,7 @@ def depth(obj, _depth=0):
 
 
 class TabNode(QtWidgets.QWidget, LoggingMixin):
+    # Base class for tab items
 
     # ------------------------------------------------------------------------ #
     def __repr__(self):
@@ -70,6 +71,7 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
             name = parent.tabs.tabText(index)
             pre = f'{name!r}, '
             post = f', {index=}'
+
         return f'<{self.__class__.__name__}: {pre}level={self._level()}{post}>'
 
     def __getitem__(self, _):
@@ -80,7 +82,10 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         return tuple(set(parent) - {self}) if (parent := self._parent()) else ()
 
     def _parent(self):
-        return self.parent().parent().parent()  # ^_^
+        parent = self.parent().parent().parent()    # ^_^
+        if isinstance(parent, TabNode):
+            return parent
+        return
 
     def _ancestors(self):
         manager = self
@@ -93,6 +98,9 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
             *_, root = self._ancestors()
             return root
         return self
+
+    def _is_root(self):
+        return
 
     def _level(self):
         return len(list(self._ancestors()))
@@ -120,6 +128,16 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         return (parent._active() is self) if (parent := self._parent()) else True
 
     # ------------------------------------------------------------------------ #
+    def _height(self):
+        return len(tuple(self._current_indices()))
+
+    def _current_indices(self):
+        for node in tuple(self._active_branch())[:-1]:
+            yield node._current_index()
+
+    def _current_index(self):
+        raise NotImplementedError()
+
     def _rindex(self):
         # index of this node widget wrt root node
         child = self
@@ -206,7 +224,7 @@ class TabManager(TabNode):
         if isinstance(figures, abc.Sequence):
             items = itt.zip_longest((), figures)
         else:
-            items = dict(figures).items()
+            items = dict(figures or {}).items()
 
         # add tabs
         for name, fig in items:
@@ -300,13 +318,6 @@ class TabManager(TabNode):
     def _current_index(self):
         return self.tabs.currentIndex() - self.index_offset
 
-    def _current_indices(self):
-        if not (branch := tuple(self._active_branch())):
-            return
-
-        for node in branch[:-1]:
-            yield node._current_index()
-
     def _find(self, item):
         if (i := self.tabs.indexOf(item)) != -1:
             i -= self.index_offset
@@ -319,9 +330,6 @@ class TabManager(TabNode):
     def _inactive(self):
         return self._active()._siblings()
 
-    def _height(self):
-        return len(tuple(self._current_indices()))
-
     # def _children(self):
     #     return ()
 
@@ -332,6 +340,44 @@ class TabManager(TabNode):
     # _descendents = _descendants
 
     # ------------------------------------------------------------------------ #
+    def _factory(self, name, fig):
+        # create tab name if needed
+        if name is None:
+            name = self._tab_name_template.format(
+                self.tabs.count() - self.index_offset + 1
+            )
+
+        # create figure if needed
+        fig = fig or Figure()
+
+        # if pyplot gui is active, make it close the figure
+        if plt := sys.modules.get('matplotlib.pyplot'):
+            plt.close(fig)
+
+        return name, MplTabbedFigure(fig, parent=self)
+
+    def _add_tab(self, name, obj, focus):
+        # add tab
+        self.logger.info('Adding tab {!r}', name)
+        self.tabs.addTab(obj, name)
+
+        if focus:
+            index = self.tabs.currentIndex() + 1
+            logger.debug('focussing on {}', index)
+            self.tabs.setCurrentIndex(index)
+
+    def add_tab(self, name=None, *, fig=None, focus=True):
+        """
+        Dynamically add a tab with embedded matplotlib canvas.
+        """
+        name, obj = self._factory(name, fig)
+        self._add_tab(name, obj, focus)
+        return obj
+
+    def remove_tab(self, key):
+        return self.tabs.remove(self.tabs.indexOf(self._resolve_index(key)))
+    # ------------------------------------------------------------------------ #
+
     def add_callback(self, func):
         # connect plot callback
         if not (func and callable(func)):
@@ -365,28 +411,33 @@ class TabManager(TabNode):
                 fig.canvas.draw()
 
     # ------------------------------------------------------------------------ #
+    def _add_tab(self, name, obj, focus):
+        # set the default tab name
+        if name is None:
+            name = self._tab_name_template.format(
+                self.tabs.count() - self.index_offset + 1
+            )
+
+        # add tab
+        self.tabs.addTab(obj, name)
+
+        if focus:
+            index = self.tabs.currentIndex() + 1
+            logger.debug('focussing on {}', index)
+            self.tabs.setCurrentIndex(index)
 
     def add_tab(self, name=None, *, fig=None, focus=True):
         """
         Dynamically add a tab with embedded matplotlib canvas.
         """
-        self.logger.debug('Adding tab {!r}', name)
+        self.logger.info('Adding tab {!r}', name)
         fig = fig or Figure()
 
         if plt := sys.modules.get('matplotlib.pyplot'):
             plt.close(fig)
 
-        # set the default tab name
-        if name is None:
-            name = self._tab_name_template.format(self.tabs.count() - self.index_offset + 1)
-
-        tab = MplTabbedFigure(fig)
-        self.tabs.addTab(tab, name)
-
-        if focus:
-            logger.debug('focussing on {}', self.tabs.currentIndex() + 1)
-            self.tabs.setCurrentIndex(self.tabs.currentIndex() + 1)
-
+        nested = MplTabbedFigure(fig, parent=self)
+        self._add_tab(name, nested, focus)
         return fig
 
     def remove_tab(self, key):
@@ -516,14 +567,14 @@ class NestedTabsManager(TabManager):
 
         # tabs switches the group being displayed in central panel which may
         # itself be NestedTabsManager or TabManager at lowest level
-        figures = dict(figures)
+        figures = dict(figures or ())
         for name, figs in figures.items():
             self.add_group(name, figs)
 
         if self.plot:
             self.logger.debug('Detected figure initializer method {}. '
-                              'Connecting group tab change callback to this method.',
-                              self.plot)
+                              'Connecting group tab change callback to this '
+                              'method.', self.plot)
             self.add_callback(self, self.plot)
 
         if figures:
@@ -539,7 +590,7 @@ class NestedTabsManager(TabManager):
         logger.debug('{!r} {}', self, i)
         # disconnect callback from previously active tab
         if self._previous == -1:  # first change
-            current = [0] * self._height()
+            current = [0] * (self._height() - 1)
         else:
             # turn of the focus linking for inactive groups else infinite loop
             self.logger.debug('Unlinking previously active tab {}', self._previous)
@@ -548,47 +599,48 @@ class NestedTabsManager(TabManager):
             current = tuple(previous._current_indices())
         self._previous = i
 
-        # self.logger.debug()
+        #
         super()._on_change((i, *current))
-
         self.logger.debug('Callback completed successfully.')
 
     # ------------------------------------------------------------------------ #
-    def add_tab(self, *keys, fig=None, focus=True):
+    def _factory(self, keys, fig):
+        n = len(keys)
+
+        if not n:
+            # imples 1d!
+            raise NotImplementedError
+
+        if n == 1:
+            return super()._factory(*keys, fig)
+
+        # add nested tabs
+        gid, *_ = keys
+        kls = TabManager if (n == 2) else type(self)
+        return gid, kls(fig, parent=self)
+
+    def add_tab(self, *keys, fig=(), focus=None):
         """
         Add a (nested) tab.
         """
-        self.logger.debug('Adding tab: {}', keys)
+        self.logger.info('Adding tab: {}', keys)
 
-        gid, *keys = keys
+        gid, *other = keys
         if gid not in self:
-            if not keys:
-                raise NotImplementedError
+            super().add_tab(keys,
+                            fig=fig,
+                            focus=(self.tabs.count() == self.index_offset))
+        #
+        return self[gid].add_tab(*other, fig=fig, focus=focus)
 
-            # add nested tabs
-            self.add_group(gid,
-                           (fig or {}).get(gid, ()),
-                           kls=TabManager if (len(keys) == 1) else type(self))
-
-        return self[gid].add_tab(*keys, fig=fig, focus=focus)
-
-    def add_group(self, name=None, figures=(), kls=None):
+    def add_group(self, name=None, figures=()):
         """
         Add a (nested) tab group.
         """
-        i = self.tabs.count()
-        if name is None:
-            name = self._tab_name_template.format(i)
-
-        self.logger.debug(f'Adding group {name!r}')
-
-        kls = kls or type(self)
-        nested = kls(figures, parent=self)
-        self.tabs.addTab(nested, name)
-
-        if i == self.index_offset:
-            self.tabs.setCurrentIndex(i)
-
+        nested = type(self)(figures, parent=self)
+        super()._add_tab(name,
+                         nested,
+                         self.tabs.count() == self.index_offset)
         return nested
 
     # -------------------------------------------------------------------- #
@@ -697,6 +749,9 @@ class MplTabGUI(QtWidgets.QMainWindow):
 
     def add_callback(self, func):
         self.tabs.add_callback(func)
+
+    def link_focus(self):
+        pass  # only meaningful for MultiTab
 
 
 # aliases

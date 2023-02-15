@@ -6,7 +6,7 @@ import numpy as np
 
 # local
 from mpl_multitab import MplTabs, QtWidgets
-
+from matplotlib.figure import Figure
 # ---------------------------------------------------------------------------- #
 # ensure we don't use pyplot
 sys.modules['matplotlib.pyplot'] = None

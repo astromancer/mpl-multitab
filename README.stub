@@ -82,7 +82,7 @@ following example demonstrates the usage pattern for datasets grouped by 3
 different features. The same pattern can be used to handle data of any
 dimensionality. Tabs all the way down!
 
-{EXAMPLES[nd][nd]}
+{EXAMPLES[3d][3d]}
 
 
 
