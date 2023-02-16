@@ -32,14 +32,15 @@ STRUCT = {
 
 # ---------------------------------------------------------------------------- #
 
-@pytest.fixture(params=range(1, 4))
-def level(request):
-    return request.param
+# @pytest.fixture(params=range(1, 4))
+# def level(request):
+#     return request.param
 
 
-@pytest.fixture(params='NW')
-def pos(request):
-    return request.param
+# @pytest.fixture(params=['N', 'W' ])
+# def pos(request, level):
+#     itt.product(*['NW'] * level)
+#     return request.param
 
 
 def get_example(level, name):
@@ -119,6 +120,7 @@ def check_indices(ui, indices):
     assert ui[indices]._index() == indices
 
 
+@pytest.mark.parametrize('level', range(1, 4))
 def test_figures_predefined(qtbot, level):
     #
     ui = MplMultiTab(create_figures(level))
@@ -152,11 +154,14 @@ def _make_ui(level, pos):
 
     ui.add_callback(_plot)        # add plot worker
     ui.link_focus()               # keep same tab in focus across group switches
-    ui.set_focus(*([0] * level))  # trigger the plotting for [group 0, ...] tab 0
-    ui.show()
+    ui.show()                     # this will trigger the first plot for [group 0, ...] tab 0
     return ui
 
 
+@pytest.mark.parametrize(
+    'level, pos',
+    ((i, ''.join(pos)) for i in range(1, 4) for pos in itt.product(*['NW'] * i))
+)
 def test_delay_draw(qtbot, level, pos, screenshot=False):
     #
     ui = _make_ui(level, pos)
@@ -176,5 +181,5 @@ def test_delay_draw(qtbot, level, pos, screenshot=False):
 #     app = QtWidgets.QApplication(sys.argv)
 #     # ui = example_nd()
 #     # ui = example_figures_predefined()
-#     ui = _make_ui(2, 'W')
+#     ui = _make_ui(3, 'WNN')
 #     sys.exit(app.exec_())
