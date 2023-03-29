@@ -7,6 +7,7 @@ tabbed window manager allowing easy navigation between many active figures.
 import sys
 import numbers
 import itertools as itt
+import functools as ftl
 import contextlib as ctx
 from pathlib import Path
 from collections import abc
@@ -151,11 +152,11 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
     def _height(self):
         i = 0
         node = self
-        while node := next(node.values(), None):
+        while (node := next(node.values(), None)) is not None:
             i += 1
         return i
 
-    def is_leaf(self):
+    def _is_leaf(self):
         return self._height() == 0
 
     # ------------------------------------------------------------------------ #
@@ -183,7 +184,7 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
     def _rindex(self):
         # index of this node widget wrt root node
         child = self
-        for parent in self._ancestors():
+        for parent in child._ancestors():
             yield parent._find(child)
             child = parent
 
@@ -214,7 +215,7 @@ class MplTabbedFigure(TabNode):
 
         self._drawn = False
 
-    def add_callback(self, func):
+    def add_callback(self, func, *args, **kws):
         # connect plot callback
         if not (func and callable(func)):
             self.logger.debug('Invalid object for callback: {}', func)
@@ -222,9 +223,9 @@ class MplTabbedFigure(TabNode):
 
         # add plot function
         self.logger.debug('Attaching callback to {}: {}', self, func)
-        self.plot = func
+        self.plot = ftl.partial(func, *args, **kws)
 
-    def _plot(self, *args, **kws):
+    def _plot(self):
 
         # self._root()._index(self)
         indices = list(self._index())
@@ -240,7 +241,7 @@ class MplTabbedFigure(TabNode):
 
         self.logger.debug('Creating plot {}.', indices)
         self._cid_draw0 = self.canvas.mpl_connect('draw_event', self._on_draw)
-        return self.plot(self.figure, indices, *args, **kws)
+        return self.plot(self.figure, indices)
 
     def _on_draw(self, event):
         self._drawn = True
@@ -249,6 +250,7 @@ class MplTabbedFigure(TabNode):
 
 class TabManager(TabNode):
 
+    plot = False
     _tab_name_template = 'Tab {}'
 
     def __init__(self, figures=(), pos='N', parent=None):
@@ -374,12 +376,9 @@ class TabManager(TabNode):
         return self.tabs.currentWidget()
 
     def _inactive(self):
-        if active := self._active():
-            return active._siblings()
-        return self.values()
+        return active._siblings() if (active := self._active()) else self.values()
 
     # ------------------------------------------------------------------------ #
-
     def _factory(self, name, fig):
         # create tab name if needed
         if name is None:
@@ -395,12 +394,14 @@ class TabManager(TabNode):
 
         return name, MplTabbedFigure(fig, parent=self)
 
-    def add_tab(self, name=None, *, fig=None, focus=False):
+    def add_tab(self, name=None, *, fig=None, focus=False, callback=None):
         """
         Dynamically add a tab with embedded matplotlib canvas.
         """
         name, obj = self._factory(name, fig)
         self._add_tab(name, obj, focus)
+        if callback:
+            self.add_callback(callback)
         return obj
 
     def _add_tab(self, name, obj, focus):
@@ -417,7 +418,7 @@ class TabManager(TabNode):
         return self.tabs.remove(self.tabs.indexOf(self._resolve_index(key)))
 
     # ------------------------------------------------------------------------ #
-    def add_callback(self, func):
+    def add_callback(self, func, *args, **kws):
         # connect plot callback
         if not (func and callable(func)):
             self.logger.debug('Invalid object for callback: {}', func)
@@ -429,7 +430,7 @@ class TabManager(TabNode):
 
         # propagate down
         for node in self.values():
-            node.add_callback(func)
+            node.add_callback(func, *args, **kws)
 
     def remove_callback(self, cid):
         return self.tabs.currentChanged.disconnect(cid)
@@ -446,6 +447,7 @@ class TabManager(TabNode):
         indices = (i - self.index_offset, *indices)
 
         if self._is_active() and (fig := self[indices]).plot:
+            self.logger.info(f'{indices}, {fig._height()}, {fig._is_leaf()}')
             fig._plot()
 
             if not fig._drawn:
@@ -562,7 +564,6 @@ class TabManager(TabNode):
 
 class NestedTabsManager(TabManager):
 
-    plot = False
     _tab_name_template = 'Group {}'
     _factory_kws = {}
 
@@ -610,13 +611,15 @@ class NestedTabsManager(TabManager):
         return gid, kls(fig, parent=self, **self._factory_kws)
 
     def _add_tab(self, name, obj, focus):
-        if isinstance(obj, TabManager) and (self.pos in 'EW'):
-            if obj.pos == 'N' and not self.index_offset:
-                self._insert_spacer()
+        if (isinstance(obj, TabManager)
+                and (self.pos in 'EW')
+                and obj.pos == 'N'
+                and not self.index_offset):
+            self._insert_spacer()
 
         super()._add_tab(name, obj, focus)
 
-    def add_tab(self, *keys, fig=(), focus=None):
+    def add_tab(self, *keys, fig=(), focus=None, callback=None):
         """
         Add a (nested) tab.
         """
@@ -624,11 +627,10 @@ class NestedTabsManager(TabManager):
 
         gid, *other = keys
         if gid not in self:
-            super().add_tab(keys,
-                            fig=fig,
-                            focus=focus or (self.tabs.count() == self.index_offset))
+            focus = focus or (self.tabs.count() == self.index_offset)
+            tab = super().add_tab(keys, focus=focus, callback=callback)
         #
-        return self[gid].add_tab(*other, fig=fig, focus=focus)
+        return self[gid].add_tab(*other, fig=fig, focus=focus) if other else tab
 
     def add_group(self, name=None, figures=()):
         """
@@ -649,18 +651,24 @@ class NestedTabsManager(TabManager):
         logger.debug('{!r} {}', self, i)
         # disconnect callback from previously active tab
         if self._previous == -1:  # first change
+            previous = None
             current = [0] * (self._height() - 1)
         else:
             # turn of the focus linking for inactive groups else infinite loop
             self.logger.debug('Unlinking previously active tab {}', self._previous)
             previous = self.tabs.widget(self._previous + self.index_offset)
             previous.unlink_focus()
-            current = tuple(previous._current_indices())
+            current = list(previous._current_indices())
         self._previous = upcoming
 
         #
-        super()._on_change(i, *current)
-        self.logger.debug('Callback completed successfully.')
+        indices = [i]
+        if len(self):
+            if len(current) == self[upcoming]._height():
+                indices += current
+
+            super()._on_change(*indices)
+            self.logger.debug('Callback completed successfully.')
 
     # -------------------------------------------------------------------- #
     def set_focus(self, *indices):
@@ -694,10 +702,13 @@ class NestedTabsManager(TabManager):
         target.set_focus(*new)
 
         #  also set focus of siblings
+        indices = i, *new
         self.logger.debug('{!r} matching sibling groups focus with : {}',
-                          self, [i, *new])
+                          self, indices)
+        h = self._height()
         for mgr in self._siblings():
-            mgr.set_focus(i, *new)
+            if mgr._height() == h:
+                mgr.set_focus(*indices)
 
         # add focus linking callback to new group
         target.link_focus()
@@ -734,7 +745,9 @@ class NestedTabsManager(TabManager):
     #         tabs.save(filenames, folder, **kws)
 
 
-class MplTabGUI(QtWidgets.QMainWindow):
+class MplTabGUI(QtWidgets.QMainWindow, LoggingMixin):
+
+    plot = None
 
     def __init__(self, figures=(), title=None, pos='N',
                  manager=TabManager, parent=None, **kws):
@@ -754,6 +767,16 @@ class MplTabGUI(QtWidgets.QMainWindow):
         layout.addWidget(self.tabs)
         self.main_frame.setLayout(layout)
 
+        # Tab method aliases
+        self.add_tab = self.tabs.add_tab
+        self.set_focus = self.tabs.set_focus
+        self.add_callback = self.tabs.add_callback
+
+        # Plotting callback
+        if self.plot:
+            self.logger.debug('Detected plot method. Adding callback.')
+            self.add_callback(self.plot)
+
     def __repr__(self):
         name = f'{self.__class__.__name__}: '
         if (title := self.windowTitle()) != name:
@@ -771,15 +794,6 @@ class MplTabGUI(QtWidgets.QMainWindow):
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.show()
-
-    def add_tab(self, name=None, *, fig=None):
-        return self.tabs.add_tab(name, fig=fig)
-
-    def set_focus(self, *indices):
-        self.tabs.set_focus(*indices)
-
-    def add_callback(self, func):
-        self.tabs.add_callback(func)
 
     def link_focus(self):
         pass  # only meaningful for MultiTab
@@ -813,14 +827,7 @@ class MplMultiTab(MplTabGUI):
 
         super().__init__(figures, title, pos, manager, parent, **kws)
 
-    def add_group(self, name=None, figures=()):
-        self.tabs.add_group(name, figures)
-
-    def add_tab(self, *keys, fig=None):
-        """
-        Add a (nested) tab.
-        """
-        return self.tabs.add_tab(*keys, fig=fig)
+        # self.add_group = self.tabs.add_group
 
     def link_focus(self):
         self.tabs.link_focus()
