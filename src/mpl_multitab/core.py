@@ -218,11 +218,11 @@ class MplTabbedFigure(TabNode):
     def add_callback(self, func, *args, **kws):
         # connect plot callback
         if not (func and callable(func)):
-            self.logger.debug('Invalid object for callback: {}', func)
+            self.logger.debug('Invalid object for callback: {!r}', func)
             return
 
         # add plot function
-        self.logger.debug('Attaching callback to {}: {}', self, func)
+        self.logger.debug('Attaching callback to {}: {}', self, func.__name__)
         self.plot = ftl.partial(func, *args, **kws)
 
     def _plot(self):
@@ -244,8 +244,10 @@ class MplTabbedFigure(TabNode):
         return self.plot(self.figure, indices)
 
     def _on_draw(self, event):
+        logger.info('Running first draw action.')
         self._drawn = True
         self.canvas.mpl_disconnect(self._cid_draw0)
+        logger.info('disconnected first draw action.')
 
 
 class TabManager(TabNode):
@@ -425,7 +427,7 @@ class TabManager(TabNode):
             return
 
         # Connect function
-        self.logger.debug('Adding callback: {}', self._on_change)
+        self.logger.debug('{} adding tab change callback.', self)
         self._cid = self.tabs.currentChanged.connect(self._on_change)
 
         # propagate down
@@ -446,12 +448,12 @@ class TabManager(TabNode):
         i, *indices = indices
         indices = (i - self.index_offset, *indices)
 
-        if self._is_active() and (fig := self[indices]).plot:
-            self.logger.info(f'{indices}, {fig._height()}, {fig._is_leaf()}')
+            self.logger.debug('Launching plot callback for active tab at index {}',
+                              (self._index(), indices))
             fig._plot()
 
             if not fig._drawn:
-                self.logger.debug('Drawing figure: {}', i)
+                self.logger.debug('Drawing figure: {}', indices)
                 fig.canvas.draw()
 
     # ------------------------------------------------------------------------ #
@@ -459,6 +461,7 @@ class TabManager(TabNode):
         self.logger.debug('Focus: {}. cid: {}, linking: {}',
                           key, self._cid, self._link_focus)
         if (self.tabs.currentIndex() == (to := self._resolve_index(key))):
+            # fire events even when tab changes to current
             self._on_change(to)
         else:
             self.tabs.setCurrentIndex(self._resolve_index(key))
@@ -473,7 +476,7 @@ class TabManager(TabNode):
             self._link_focus = True
             return
 
-        self.logger.debug('Adding callback {}', self._on_change)
+        self.logger.debug('{} adding tab change callback {}')
         self._cid = self.tabs.currentChanged.connect(self._on_change)
         self._link_focus = True
 
@@ -487,7 +490,7 @@ class TabManager(TabNode):
 
     def _match_focus(self, i):
         i = i - self.index_offset
-        self.logger.debug('Callback {!r}: {}', self, i)
+        self.logger.debug('Matching focus {!r}: {}', self, i)
 
         *current, _ = self._index()
         self.logger.debug('Current: {}', [*current, _])
@@ -532,7 +535,9 @@ class TabManager(TabNode):
             if not (filename := Path(filename)).is_absolute():
                 filename = folder / filename
 
-            self[i].figure.savefig(filename.resolve(), **kws)
+            filename = filename.resolve()
+            logger.debug('Saving figure: {}')
+            self[i].figure.savefig(filename, **kws)
 
     save_figures = save
 
@@ -623,7 +628,7 @@ class NestedTabsManager(TabManager):
         """
         Add a (nested) tab.
         """
-        self.logger.debug('Adding tab: {}', keys)
+        self.logger.debug('Adding tab: {!r}', keys)
 
         gid, *other = keys
         if gid not in self:
@@ -668,11 +673,12 @@ class NestedTabsManager(TabManager):
                 indices += current
 
             super()._on_change(*indices)
-            self.logger.debug('Callback completed successfully.')
+            self.logger.debug('Callback completed successfully for {} on {}.',
+                              indices, self)
 
     # -------------------------------------------------------------------- #
     def set_focus(self, *indices):
-        self.logger.debug('{!r} focus {}', self, indices)
+        self.logger.debug('{!r} focussing on {}', self, indices)
         if not indices:
             return
 
