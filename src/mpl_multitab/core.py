@@ -350,6 +350,9 @@ class TabManager(TabNode):
 
         return (key % n) + self.index_offset
 
+    # def _tab_text(self, index):
+    #     return self.tabs.tabText(index + self.index_offset)
+
     # ------------------------------------------------------------------------ #
     # @property
     # def index_offset(self):
@@ -758,6 +761,17 @@ class NestedTabsManager(TabManager):
             target = self._active()
         target.unlink_focus(*indices)
 
+    # ------------------------------------------------------------------------ #
+    def _tab_text(self, indices):
+
+        tabs = self
+        for i in indices:
+            yield tabs.tabs.tabText(i + tabs.index_offset)
+            tabs = tabs[i]
+
+    def tab_text(self, indices):
+        return tuple(self._tab_text(indices))
+
     # def save(self, filenames=(), folder='', **kws):
     #     n = self.tabs.count()
     #     if n == 1:
@@ -851,7 +865,6 @@ class MplMultiTab(MplTabGUI):
                  manager=NestedTabsManager,
                  parent=None, **kws):
         #
-
         super().__init__(figures, title, pos, manager, parent, **kws)
 
         # self.add_group = self.tabs.add_group
