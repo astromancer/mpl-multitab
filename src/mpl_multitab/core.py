@@ -43,7 +43,9 @@ def is_template_string(s):
     if not isinstance(s, str):
         return False
 
-    if '{' in s:  # NOTE: this is a weak test
+    if '{' in s:
+        # NOTE: this is a fairly weak test, but hopefully no one actually wants
+        # curly braces in a actualy file name
         return True
 
     raise ValueError('Not a valid template string. Expected format string '
@@ -550,13 +552,11 @@ class TabManager(TabNode):
     save_figures = save
 
     def _check_filenames(self, filenames):
-        n = self.tabs.count()
-        if is_template_string(filenames):
-            self.logger.debug('Saving {} figures with filename template: {!r}',
-                              n, filenames)
-            # partial format string with dataset name
-            return ((filenames.format(self.tabs.tabText(_))) for _ in range(n))
 
+        if isinstance(filenames, Path):
+            filenames = str(filenames / '{}')
+
+        n = self.tabs.count()
         if isinstance(filenames, abc.Sequence):
             if (m := len(filenames)) != n:
                 raise ValueError(
@@ -565,12 +565,21 @@ class TabManager(TabNode):
                 )
 
             if isinstance(filenames, abc.MutableMapping):
-                return (filenames[self.tabs.tabText(_)]
-                        for _ in range(n))
+                filenames = filenames.get
+
             return filenames
 
         if isinstance(filenames, abc.Iterable):
             return filenames
+
+        if is_template_string(filenames):
+            self.logger.debug('Saving {} figures with filename template: {!r}',
+                              n, filenames)
+            filenames = filenames.format
+
+        if callable(filenames):
+            # partial format string with dataset name
+            return ((filenames(self.tabs.tabText(i))) for i in range(n))
 
         raise TypeError(f'Invalid filenames: {filenames!r}')
 
