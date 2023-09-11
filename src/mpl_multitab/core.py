@@ -381,29 +381,37 @@ class TabManager(TabNode):
         return active._siblings() if (active := self._active()) else self.values()
 
     # ------------------------------------------------------------------------ #
-    def _factory(self, name, fig):
+    def _factory(self, name, fig, **kws):
         # create tab name if needed
         if name is None:
             name = self._tab_name_template.format(
                 self.tabs.count() - self.index_offset + 1
             )
+
         # create figure if needed
-        fig = fig or Figure()
+        if isinstance(fig, abc.MutableMapping):
+            fig = Figure(**fig, **kws)
+
+        fig = fig or Figure(**kws)
+        assert isinstance(fig, Figure)
 
         # if pyplot gui is active, make it close the figure
         if plt := sys.modules.get('matplotlib.pyplot'):
             plt.close(fig)
 
-        return name, MplTabbedFigure(fig, parent=self)
+        # convert to str required by pyside
+        return str(name), MplTabbedFigure(fig, parent=self)
 
-    def add_tab(self, name=None, *, fig=None, focus=False, callback=None):
+    def add_tab(self, name=None, *, fig=None, focus=False, callback=None, **kws):
         """
         Dynamically add a tab with embedded matplotlib canvas.
         """
-        name, obj = self._factory(name, fig)
+        name, obj = self._factory(name, fig, **kws)
         self._add_tab(name, obj, focus)
+
         if callback:
             self.add_callback(callback)
+
         return obj
 
     def _add_tab(self, name, obj, focus):
@@ -603,17 +611,17 @@ class NestedTabsManager(TabManager):
             self.link_focus()
 
     # ------------------------------------------------------------------------ #
-    def _factory(self, keys, fig):
+    def _factory(self, keys, fig, **kws):
 
         assert (n := len(keys))
 
         if n == 1:
-            return super()._factory(*keys, fig)
+            return super()._factory(*keys, fig, **kws)
 
         # add nested tabs
         gid, *_ = keys
         kls = TabManager if (n == 2) else type(self)
-        return gid, kls(fig, parent=self, **self._factory_kws)
+        return str(gid), kls(fig, parent=self, **self._factory_kws)
 
     def _add_tab(self, name, obj, focus):
         if (isinstance(obj, TabManager)
@@ -624,13 +632,14 @@ class NestedTabsManager(TabManager):
 
         super()._add_tab(name, obj, focus)
 
-    def add_tab(self, *keys, fig=(), focus=None, callback=None):
+    def add_tab(self, *keys, fig=(), focus=None, callback=None, **kws):
         """
         Add a (nested) tab.
         """
         self.logger.debug('Adding tab: {!r}', keys)
 
         gid, *other = keys
+        gid = str(gid)  # required by pyside
         if gid not in self:
             focus = focus or (self.tabs.count() == self.index_offset)
             tab = super().add_tab(keys, focus=focus, callback=callback)
