@@ -458,6 +458,9 @@ class TabManager(TabNode):
         i, *indices = indices
         indices = (i - self.index_offset, *indices)
 
+        if (self in self._root()._active_branch()
+                and (fig := self[indices])._is_active() and fig.plot):
+            #
             self.logger.debug('Launching plot callback for active tab at index {}',
                               (self._index(), indices))
             fig._plot()
