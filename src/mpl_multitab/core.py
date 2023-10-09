@@ -152,14 +152,13 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
     _depth = _level
 
     def _height(self):
-        i = 0
-        node = self
-        while (node := next(node.values(), None)) is not None:
-            i += 1
-        return i
+        if self._is_leaf():
+            return 0
+
+        return max(node._height() for node in self.values()) + 1
 
     def _is_leaf(self):
-        return self._height() == 0
+        return next(self.values(), None) is None
 
     # ------------------------------------------------------------------------ #
     def _active(self):
