@@ -39,6 +39,17 @@ TAB_POS = {
 # ---------------------------------------------------------------------------- #
 
 
+def get_figure(ui=None, *keys, **kws):
+    if ui:
+        tab = ui.add_tab(*keys, fig=kws)
+        return tab.figure
+
+    if plt := sys.modules.get('matplotlib.pyplot'):
+        return plt.figure(**kws)
+
+    return Figure(**kws)
+
+
 def is_template_string(s):
     if not isinstance(s, str):
         return False
