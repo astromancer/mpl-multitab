@@ -724,15 +724,13 @@ class NestedTabsManager(TabManager):
         if self._previous == -1:  # first change
             self.logger.debug('First tab change.')
             previous = None
-            current = [0] * (self._height() - 1)
+            current = list(self[upcoming]._current_indices())
         else:
             # turn of the focus linking for inactive groups else infinite loop
             self.logger.debug('Unlinking previously active tab {}', self._previous)
             previous = self.tabs.widget(self._previous + self.index_offset)
             previous.unlink_focus()
             current = list(previous._current_indices())
-        self._previous = upcoming
-
         #
         self.logger.debug(f'{current = }, {upcoming = }')
         indices = [i]
@@ -743,6 +741,7 @@ class NestedTabsManager(TabManager):
             super()._on_change(*indices)
 
         #
+        self._previous = upcoming
 
     # -------------------------------------------------------------------- #
 
