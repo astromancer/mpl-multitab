@@ -58,13 +58,10 @@ ehthumbs.db
 Icon?
 Thumbs.db
 
-
-
 # Documentation generated files #
 #################################
 # sphinx build directory
 doc/_build
-
 
 # Pytest/Nose generated files #
 ###############################
@@ -87,4 +84,5 @@ lib/z.lib
 #################
 .ipynb_checkpoints/
 
-
+# Linters
+*.trunk
