@@ -117,10 +117,10 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         yield from self.values()
 
     def keys(self):
-        yield
+        yield from ()
 
     def values(self):
-        yield
+        yield from ()
 
     # ------------------------------------------------------------------------ #
     def _children(self):
@@ -128,6 +128,7 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
 
     def _descendants(self):
         for child in self._children():
+            yield child
             yield from child._descendants()
 
     # alias
@@ -170,6 +171,9 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
 
     def _is_leaf(self):
         return next(self.values(), None) is None
+
+    def _leaves(self):
+        yield from (x for x in self._descendants() if x._is_leaf())
 
     # ------------------------------------------------------------------------ #
     def _active(self):
