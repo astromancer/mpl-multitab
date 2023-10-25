@@ -238,8 +238,7 @@ class MplTabbedFigure(TabNode):
             return
 
         # add plot function
-        self.logger.debug('Attaching callback to {}: {}', self, func.__name__)
-        self.plot = ftl.partial(func, *args, **kws)
+        self.logger.debug('Adding plot method to {}: {}', self, func)
 
     def _plot(self):
 
@@ -255,15 +254,17 @@ class MplTabbedFigure(TabNode):
             self.logger.debug('No plot method defined for {}.', indices)
             return
 
-        self.logger.debug('Creating plot {}.', indices)
+        # Connect draw calllback
         self._cid_draw0 = self.canvas.mpl_connect('draw_event', self._on_draw)
+
+        self.logger.debug('Calling plot method {} for {}.', self.plot, indices)
         return self.plot(self.figure, indices)
 
     def _on_draw(self, event):
-        logger.info('Running first draw action.')
+        logger.debug('Running first draw action.')
         self._drawn = True
         self.canvas.mpl_disconnect(self._cid_draw0)
-        logger.info('disconnected first draw action.')
+        logger.debug('Disconnected first draw action.')
 
 
 class TabManager(TabNode):
@@ -448,13 +449,13 @@ class TabManager(TabNode):
 
     # ------------------------------------------------------------------------ #
     def add_callback(self, func, *args, **kws):
-        # connect plot callback
+        # add plot callback for all children
         if not (func and callable(func)):
             self.logger.debug('Invalid object for callback: {}', func)
             return
 
         # Connect function
-        self.logger.debug('{} adding tab change callback.', self)
+        self.logger.debug('{} connecting tab change callback.', self)
         self._cid = self.tabs.currentChanged.connect(self._on_change)
 
         # propagate down
@@ -474,17 +475,30 @@ class TabManager(TabNode):
         # plot init for next active tab
         i, *indices = indices
         indices = (i - self.index_offset, *indices)
-
-        if (self in self._root()._active_branch()
-                and (fig := self[indices])._is_active() and fig.plot):
+        fig = self[indices]
+        if ((active := self in self._root()._active_branch()) and
+                (active_branch := fig._is_active()) and fig.plot):
             #
-            self.logger.debug('Launching plot callback for active tab at index {}',
-                              (self._index(), indices))
+            self.logger.opt(lazy=True).debug(
+                'Launching plot callback for active tab at index {}',
+                lambda: (self._index(), indices)
+            )
             fig._plot()
 
             if not fig._drawn:
                 self.logger.debug('Drawing figure: {}', indices)
                 fig.canvas.draw()
+
+            return True
+
+        self.logger.opt(lazy=True).debug(
+            'Callback did not execute since: {}',
+            lambda: [f'{l} = {on}' for l, on in
+                     dict(active=active,
+                          active_branch=active_branch,
+                          plot=fig.plot).items()
+                     if not on])
+        return False
 
     # ------------------------------------------------------------------------ #
     def set_focus(self, key):
@@ -694,6 +708,7 @@ class NestedTabsManager(TabManager):
         logger.debug('{!r} {}', self, i)
         # disconnect callback from previously active tab
         if self._previous == -1:  # first change
+            self.logger.debug('First tab change.')
             previous = None
             current = [0] * (self._height() - 1)
         else:
@@ -705,16 +720,18 @@ class NestedTabsManager(TabManager):
         self._previous = upcoming
 
         #
+        self.logger.debug(f'{current = }, {upcoming = }')
         indices = [i]
         if len(self):
             if len(current) == self[upcoming]._height():
                 indices += current
 
             super()._on_change(*indices)
-            self.logger.debug('Callback completed successfully for {} on {}.',
-                              indices, self)
+
+        #
 
     # -------------------------------------------------------------------- #
+
     def set_focus(self, *indices):
         self.logger.debug('{!r} focussing on {}', self, indices)
         if not indices:
@@ -858,7 +875,7 @@ class MplTabGUI(QtWidgets.QMainWindow, LoggingMixin):
         mgr = self.tabs
         if len(mgr) and mgr._active() is None:
             # an inactive tab is selected??
-            logger.debug('Focussing before show')
+            logger.debug('Focussing before show.')
             mgr.set_focus(*([0] * mgr._height()))
         else:
             mgr._on_change(mgr.tabs.currentIndex())
