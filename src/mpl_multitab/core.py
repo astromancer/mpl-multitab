@@ -422,22 +422,23 @@ class TabManager(TabNode):
         # convert to str required by pyside
         return str(name), MplTabbedFigure(fig, parent=self)
 
-    def add_tab(self, name=None, *, fig=None, focus=False, callback=None, **kws):
+    def add_tab(self, name=None, position=-1, *, fig=None, focus=False,
+                **kws):
         """
         Dynamically add a tab with embedded matplotlib canvas.
         """
         name, obj = self._factory(name, fig, **kws)
-        self._add_tab(name, obj, focus)
-
-        if callback:
-            self.add_callback(callback)
+        self._add_tab(name, obj, position, focus)
 
         return obj
 
-    def _add_tab(self, name, obj, focus):
+    def _add_tab(self, name, obj, pos, focus):
         # add tab
-        self.logger.debug('{!r} Adding tab {}', self, name)
-        self.tabs.addTab(obj, name)
+        self.logger.debug('{!r} Adding tab {} at position {}.', self, name, pos)
+        if pos == -1:
+            self.tabs.addTab(obj, name)
+        else:
+            self.tabs.insertTab(pos, obj, name)
 
         if focus:
             index = self.tabs.currentIndex() + 1
@@ -445,9 +446,16 @@ class TabManager(TabNode):
             self.tabs.setCurrentIndex(index)
 
     def remove_tab(self, key):
-        return self.tabs.remove(self.tabs.indexOf(self._resolve_index(key)))
+    def replace_tab(self, key, fig, focus=False, **kws):
+        index = self._resolve_index(key)
+        name = self.tabs.tabText(key)
+        self.tabs.removeTab(index)
+        tab = self.add_tab(name, index, fig=fig, focus=focus, **kws)
+        self.tabs.setCurrentIndex(index)
+        return tab
 
     # ------------------------------------------------------------------------ #
+
     def add_callback(self, func, *args, **kws):
         # add plot callback for all children
         if not (func and callable(func)):
@@ -666,28 +674,34 @@ class NestedTabsManager(TabManager):
         kls = TabManager if (n == 2) else type(self)
         return str(gid), kls(fig, parent=self, **self._factory_kws)
 
-    def _add_tab(self, name, obj, focus):
+    def _add_tab(self, name, obj, pos, focus):
         if (isinstance(obj, TabManager)
                 and (self.pos in 'EW')
                 and obj.pos == 'N'
                 and not self.index_offset):
             self._insert_spacer()
 
-        super()._add_tab(name, obj, focus)
+        super()._add_tab(name, obj, pos, focus)
 
-    def add_tab(self, *keys, fig=(), focus=None, callback=None, **kws):
+    def add_tab(self, *keys, fig=(), position=-1, focus=None, **kws):
         """
         Add a (nested) tab.
         """
-        self.logger.debug('Adding tab: {!r}', keys)
-
+        self.logger.debug('Adding tab: {!r} at position {}.', keys, position)
+        kws = dict(position=position, focus=focus, **kws)
+        
         gid, *other = keys
         gid = str(gid)  # required by pyside
         if gid not in self:
+            # new tab/group
             focus = focus or (self.tabs.count() == self.index_offset)
-            tab = super().add_tab(keys, focus=focus, callback=callback)
-        #
-        return self[gid].add_tab(*other, fig=fig, focus=focus) if other else tab
+            tab = super().add_tab(keys, **kws)
+
+        # add to existing group
+        if other:
+            return self[gid].add_tab(*other, fig=fig, **kws)
+
+        return tab
 
     def add_group(self, name=None, figures=()):
         """
