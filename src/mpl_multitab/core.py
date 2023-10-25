@@ -756,7 +756,8 @@ class NestedTabsManager(TabManager):
         if i is None:
             return
 
-        self.tabs.setCurrentIndex(self._resolve_index(i))
+        i = self._resolve_index(i)
+        self.tabs.setCurrentIndex(i)
         self._previous = i
         if not self._link_focus and (active := self._active()):
             itr = [active]
