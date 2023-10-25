@@ -20,9 +20,9 @@ MARKERS = '123'
 
 
 def example_2d(n=100, colours=COLOURS, markers=MARKERS):
-    # Example use for MplMultiTab for 2d collection of data sets
-    # This dataset is equal number observations per dataset. This need not be the
-    # case in general.
+    # Example use for MplMultiTab for 2d collection of data sets.
+    # This dataset is equal number observations per dataset. This need not be
+    # the case in general.
 
     ui = MplMultiTab(pos='W')
     for c, m in itt.product(colours, markers):
@@ -54,7 +54,9 @@ def example_delay_draw(n=10_000, colours=COLOURS, markers=MARKERS):
 
     ui.add_callback(plot)   # add your plot worker
     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
-    ui.link_focus()         # keep same tab in focus across group switches
+    ui.link_focus()         # keep same tab in focus across group switches. This
+    # makes sense if all groups have the same tabs, and we'd like to easily
+    # compare data accross groups.
     return ui
 
 
