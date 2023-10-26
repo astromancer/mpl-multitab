@@ -6,8 +6,8 @@ tabbed window manager allowing easy navigation between many active figures.
 # std
 import sys
 import numbers
+import operator as op
 import itertools as itt
-import functools as ftl
 import contextlib as ctx
 from pathlib import Path
 from collections import abc
@@ -80,14 +80,16 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
 
     # ------------------------------------------------------------------------ #
     def __repr__(self):
-        pre = ''
-        post = f'/{self._root()._height()}'
+        pre = index = ''
+        level = f'{self._level()}/{self._root()._height()}'
         if parent := self._parent():
             index = parent.tabs.indexOf(self)
             pre = f'{parent.tabs.tabText(index)!r}, '
-            post += f', {index=}'
+            index = f'{index=}, '
 
-        return f'<{self.__class__.__name__}: {pre}level={self._level()}{post}>'
+        return (f'<{self.__class__.__name__}: {pre}'
+                f'level={level}, {index}'
+                f'depth={self._height()}>')
 
     def __getitem__(self, key):
         if key is ...:
@@ -348,12 +350,18 @@ class TabManager(TabNode):
         for i in range(self.index_offset, self.tabs.count()):
             yield self.tabs.widget(i)
 
+    # ------------------------------------------------------------------------ #
+    def _current_index(self):
+        return self.tabs.currentIndex() - self.index_offset
+
     def _resolve_index(self, key):
         if isinstance(key, str):
             for i, trial in enumerate(self.keys(), self.index_offset):
                 if key == trial:
                     return i
-            raise KeyError(f'Could not resolve tab index {key!r}.')
+
+            raise KeyError(f'Could not resolve tab index {key!r}. '
+                           f'Available tabs: {tuple(self.keys())}')
 
         if not isinstance(key, numbers.Integral):
             raise TypeError(f'Invalid type object ({key}) for indexing {self!r}.')
@@ -365,26 +373,20 @@ class TabManager(TabNode):
 
         return (key % n) + self.index_offset
 
+    def resolve_indices(self, *keys):
+        node = self
+        for key in keys:
+            yield node._resolve_index(key)
+            node = node[key]
+
     # def _tab_text(self, index):
     #     return self.tabs.tabText(index + self.index_offset)
 
-    # ------------------------------------------------------------------------ #
-    # @property
-    # def index_offset(self):
-    #     i = 0
-    #     if int(self.pos in 'EW'):
-    #         self.logger.info('Ping {}', type(self))
-    #         return 1
-    #         # while (node := next(node.values()))._heigth():
-    #         #     i += 1
-    #     # return i
-
-    #     # if self.pos in 'EW':
-    #     #     return sum(node.pos == 'N' for node in self._ancestors()) + 1
-    #     return 0
-
-    def _current_index(self):
-        return self.tabs.currentIndex() - self.index_offset
+    def _index_offsets(self):
+        node = self
+        while not node._is_leaf():
+            yield node.index_offset
+            node = next(node._children(), None)
 
     def _find(self, item):
         if (i := self.tabs.indexOf(item)) != -1:
@@ -434,7 +436,7 @@ class TabManager(TabNode):
 
     def _add_tab(self, name, obj, pos, focus):
         # add tab
-        self.logger.debug('{!r} Adding tab {} at position {}.', self, name, pos)
+        self.logger.debug('{!r} Adding tab {!r} at position {}.', self, name, pos)
         if pos == -1:
             self.tabs.addTab(obj, name)
         else:
@@ -446,6 +448,8 @@ class TabManager(TabNode):
             self.tabs.setCurrentIndex(index)
 
     def remove_tab(self, key):
+        return self.tabs.removeTab(self.tabs.indexOf(self._resolve_index(key)))
+
     def replace_tab(self, key, fig, focus=False, **kws):
         index = self._resolve_index(key)
         name = self.tabs.tabText(key)
@@ -455,14 +459,17 @@ class TabManager(TabNode):
         return tab
 
     # ------------------------------------------------------------------------ #
-
-    def add_callback(self, func, *args, **kws):
+    def add_callback(self, func=None, *args, **kws):
         # add plot callback for all children
-        if not (func and callable(func)):
+        if func and not callable(func):
             self.logger.debug('Invalid object for callback: {}', func)
             return
 
         # Connect function
+        if self._cid:
+            self.logger.debug('A callback is already active. Not connecting.', self)
+            return
+
         self.logger.debug('{} connecting tab change callback.', self)
         self._cid = self.tabs.currentChanged.connect(self._on_change)
 
@@ -470,35 +477,36 @@ class TabManager(TabNode):
         for node in self.values():
             node.add_callback(func, *args, **kws)
 
-    def remove_callback(self, cid):
-        return self.tabs.currentChanged.disconnect(cid)
-
     def _on_change(self, *indices):
-        self.logger.debug('Tab change {}', indices)
+        self.logger.debug('Tab change to {} (internal)', indices)
+
+        indices = tuple(map(op.sub, indices, self._index_offsets()))
+        self.logger.debug('Tab change to {} (user)', indices)
 
         # focus
         if self._link_focus:
-            self._match_focus(*indices)
+            self.match_sibling_focus(*indices)
 
         # plot init for next active tab
-        i, *indices = indices
-        indices = (i - self.index_offset, *indices)
+        # i, *indices = indices
+        # indices = (i - self.index_offset, *indices)
         fig = self[indices]
-        if ((active := self in self._root()._active_branch()) and
-                (active_branch := fig._is_active()) and fig.plot):
+        if ((active := self in (active_branch := self._root()._active_branch()))
+                and fig._is_active() and fig.plot):
             #
-            self.logger.opt(lazy=True).debug(
-                'Launching plot callback for active tab at index {}',
-                lambda: (self._index(), indices)
+            names = self._root().tab_text((*self._index(), *indices))
+            self.logger.debug(
+                'Launching plot callback for active tab at index {}', names
             )
             fig._plot()
 
             if not fig._drawn:
-                self.logger.debug('Drawing figure: {}', indices)
+                self.logger.debug('Drawing figure: {}', names)
                 fig.canvas.draw()
 
             return True
 
+        # Nothing done
         self.logger.opt(lazy=True).debug(
             'Callback did not execute since: {}',
             lambda: [f'{l} = {on}' for l, on in
@@ -506,17 +514,20 @@ class TabManager(TabNode):
                           active_branch=active_branch,
                           plot=fig.plot).items()
                      if not on])
+
         return False
 
     # ------------------------------------------------------------------------ #
-    def set_focus(self, key):
+    def set_focus(self, key, force_callback=True):
         self.logger.debug('Focus: {}. cid: {}, linking: {}',
                           key, self._cid, self._link_focus)
-        if (self.tabs.currentIndex() == (to := self._resolve_index(key))):
-            # fire events even when tab changes to current
-            self._on_change(to)
+        target = self._resolve_index(key)
+        if self.tabs.currentIndex() == target:
+            if force_callback:
+                # fire events even when tab changes to current
+                self._on_change(target)
         else:
-            self.tabs.setCurrentIndex(self._resolve_index(key))
+            self.tabs.setCurrentIndex(target)
 
     def link_focus(self):
         if self._cid:
@@ -528,7 +539,7 @@ class TabManager(TabNode):
             self._link_focus = True
             return
 
-        self.logger.debug('{} adding tab change callback {}')
+        self.logger.debug('{} adding tab change callback {}.')
         self._cid = self.tabs.currentChanged.connect(self._on_change)
         self._link_focus = True
 
@@ -538,14 +549,16 @@ class TabManager(TabNode):
                               'here.', self)
             return
 
+        self.logger.debug('Focus linking turned off for {}.', self)
         self._link_focus = False
 
-    def _match_focus(self, i):
-        i = i - self.index_offset
-        self.logger.debug('Matching focus {!r}: {}', self, i)
+    def match_sibling_focus(self, key):
+        """Match focus (active tabs) between siblings."""
+
+        self.logger.debug('Matching focus {!r}: {!r}', self, key)
 
         *current, _ = self._index()
-        self.logger.debug('Current: {}', [*current, _])
+        # self.logger.debug('Current: {}. Target: {}', [*current, _])
 
         # disonnect parent callbacks
         self.logger.debug('Unlinking focus at active toplevel.')
@@ -554,14 +567,25 @@ class TabManager(TabNode):
         toplevel.unlink_focus()
         root.set_focus(*current, None)
 
-        focus = (*current, i)
-        self.logger.debug('Callback setting {!r} sibling focus to: {}',
-                          self, focus)
+        # focus = (*current, i)
+        self.logger.debug('Callback setting {!r} siblings focus to: {}.',
+                          self, key)
         for mgr in self._siblings():
-            mgr.set_focus(i)
+            mgr.set_focus(key, force_callback=False)
 
         self.logger.debug('Reconnecting focus matching at active toplevel.')
         toplevel.link_focus()
+
+    # ------------------------------------------------------------------------ #
+    def _tab_text(self, indices):
+
+        tabs = self
+        for i in indices:
+            yield tabs.tabs.tabText(i + tabs.index_offset)
+            tabs = tabs[i]
+
+    def tab_text(self, indices):
+        return tuple(self._tab_text(indices))
 
     # ------------------------------------------------------------------------ #
     def save(self, filenames=(), folder='', **kws):
@@ -689,7 +713,7 @@ class NestedTabsManager(TabManager):
         """
         self.logger.debug('Adding tab: {!r} at position {}.', keys, position)
         kws = dict(position=position, focus=focus, **kws)
-        
+
         gid, *other = keys
         gid = str(gid)  # required by pyside
         if gid not in self:
@@ -703,87 +727,100 @@ class NestedTabsManager(TabManager):
 
         return tab
 
-    def add_group(self, name=None, figures=()):
+    def add_group(self, name=None, figures=(), position=-1):
         """
         Add a (nested) tab group.
         """
         nested = type(self)(figures, parent=self)
         super()._add_tab(name,
                          nested,
+                         position,
                          self.tabs.count() == self.index_offset)
         return nested
 
     # ------------------------------------------------------------------------ #
-    def _on_change(self, i):
+    def _on_change(self, index):
         # This will run *before* qt switches the tabs on mouse click
-        self.logger.debug('Tab change callback level {}.', self._level())
+        self.logger.debug('Tab change callback {}: index = {}.', self, index)
 
-        upcoming = i - self.index_offset
-        logger.debug('{!r} {}', self, i)
+        upcoming = index - self.index_offset
+
         # disconnect callback from previously active tab
         if self._previous == -1:  # first change
-            self.logger.debug('First tab change.')
-            previous = None
-            current = list(self[upcoming]._current_indices())
+            self.logger.debug('First tab change at level {}.', self._level())
+            # current = [-1] * (h := self[upcoming]._height())
+            target = self[upcoming]._index_offsets()
         else:
             # turn of the focus linking for inactive groups else infinite loop
-            self.logger.debug('Unlinking previously active tab {}', self._previous)
-            previous = self.tabs.widget(self._previous + self.index_offset)
+            self.logger.debug('Remove focus linking for previously active tab.')
+            previous = self.tabs.widget(self._previous)
             previous.unlink_focus()
-            current = list(previous._current_indices())
-        #
-        self.logger.debug(f'{current = }, {upcoming = }')
-        indices = [i]
+
+            # current = list(previous._current_indices())
+            target = list(self[upcoming]._current_indices())
+
+        # target indices wrt to GUI tabs (including posible spacer at position 0)
+        new = (upcoming, *target)
+        # old = (self._previous, *current)
+
+        # self.logger.debug(f'{old = }, {new = }')
+        # indices = [index, *target]
         if len(self):
-            if len(current) == self[upcoming]._height():
-                indices += current
-
-            super()._on_change(*indices)
+            # if len(current) == self[upcoming]._height():
+            #     self.logger.info('PING!!')
+            #     indices += current
+            # logger.debug(f'{indices = }')
+            super()._on_change(*new)
 
         #
-        self._previous = upcoming
+        self._previous = index
 
-    # -------------------------------------------------------------------- #
+    # ------------------------------------------------------------------------ #
+    def set_focus(self, *indices, force_callback=True):
 
-    def set_focus(self, *indices):
-        self.logger.debug('{!r} focussing on {}', self, indices)
         if not indices:
             return
 
-        i, *indices = indices
+        #
+        i, *below = indices
 
         # None can be used as sentinel to mean keep focus the same below
         if i is None:
             return
 
+        self.logger.debug('{!r} focussing on {}', self, indices)
+
         i = self._resolve_index(i)
-        self.tabs.setCurrentIndex(i)
+        self.tabs.setCurrentIndex(i)   # NOTE: will trigger _on_change
         self._previous = i
+
         if not self._link_focus and (active := self._active()):
             itr = [active]
         else:
             itr = self.values()
 
         for mgr in itr:
-            mgr.set_focus(*indices)
+            mgr.set_focus(*below, force_callback=force_callback)
 
-    def _match_focus(self, *indices):
+    def match_sibling_focus(self, *indices):
         # set focus of the new target group same as previous
         i, *new = indices
-        i -= self.index_offset
+
         target = self[i]
-        self.logger.debug('{!r} matching target group {} focus with new: {}',
+        self.logger.debug('{!r} matching target manager {} focus with new: {}',
                           self, i, new)
+
+        # if list(target._current_indices()) != new:
         target.set_focus(*new)
 
         #  also set focus of siblings
-        indices = i, *new
-        self.logger.debug('{!r} matching sibling groups focus with : {}',
+        # indices = i, *new
+        self.logger.debug('{!r} matching sibling managers focus to: {}',
                           self, indices)
         h = self._height()
         for mgr in self._siblings():
             if mgr._height() == h:
-                mgr.set_focus(*indices)
+                mgr.set_focus(*indices, force_callback=False)
 
         # add focus linking callback to new group
         target.link_focus()
@@ -795,7 +832,9 @@ class NestedTabsManager(TabManager):
             target = self[i]
         else:
             target = self._active()
-        target.link_focus(*indices)
+
+        if target:
+            target.link_focus(*indices)
 
     def unlink_focus(self, *indices):
         super().unlink_focus()
@@ -805,17 +844,6 @@ class NestedTabsManager(TabManager):
         else:
             target = self._active()
         target.unlink_focus(*indices)
-
-    # ------------------------------------------------------------------------ #
-    def _tab_text(self, indices):
-
-        tabs = self
-        for i in indices:
-            yield tabs.tabs.tabText(i + tabs.index_offset)
-            tabs = tabs[i]
-
-    def tab_text(self, indices):
-        return tuple(self._tab_text(indices))
 
     # def save(self, filenames=(), folder='', **kws):
     #     n = self.tabs.count()

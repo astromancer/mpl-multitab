@@ -6,9 +6,15 @@ from collections import defaultdict
 
 # third-party
 import numpy as np
+from loguru import logger
 from matplotlib.figure import Figure
-from mpl_multitab import MplMultiTab, QtWidgets
 
+# relative
+from .. import MplMultiTab, QtWidgets
+
+
+# ---------------------------------------------------------------------------- #
+logger.enable('mpl_multitab')
 
 # ---------------------------------------------------------------------------- #
 # ensure we don't use pyplot
@@ -22,12 +28,13 @@ HATCH = ('xx', '**')
 # ---------------------------------------------------------------------------- #
 
 
-def example_nd(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
+def example_3d(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
     # MplMultiTab with 3 tab levels
     ui = MplMultiTab()
     for c, m, h in itt.product(colours, markers, hatch):
-        # use "&" to tag letters for keyboard shortcuts which select the tab
-        #   eg: using "&x" somewhere in the tab name means you can select it with "Alt+x"
+        # use "&" to tag letters for keyboard shortcuts which select the tab eg:
+        # using "&x" somewhere in the tab name means you can select it with
+        # "Alt+x"!
         fig = ui.add_tab(f'Colour &{c.upper()}', f'Marker &{m}', f'Hatch &{h}')
         ax = fig.subplots()
         ax.scatter(*np.random.randn(2, n),
@@ -79,7 +86,7 @@ def example_delay_draw(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
-    # ui = example_nd()
+    # ui = example_3d()
     ui = example_delay_draw()
     # ui = example_figures_predefined()
     ui.show()

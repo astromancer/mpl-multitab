@@ -12,6 +12,8 @@ from loguru import logger
 from matplotlib.figure import Figure
 from mpl_multitab import MplMultiTab, MplTabs, QtCore, examples
 
+# ---------------------------------------------------------------------------- #
+logger.enable('mpl_multitab')
 
 # ---------------------------------------------------------------------------- #
 FEATURES = dict(
