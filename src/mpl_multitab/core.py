@@ -179,6 +179,9 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
     def _active(self):
         return None
 
+    def _inactive(self):
+        return filter(TabNode._is_active, self._children())
+
     def _active_branch(self):
         yield self
 
@@ -198,7 +201,7 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         raise NotImplementedError()
 
     def _rindex(self):
-        # index of this node widget wrt root node
+        # index of this node wrt root node
         child = self
         for parent in child._ancestors():
             yield parent._find(child)
