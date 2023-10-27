@@ -84,11 +84,9 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         level = f'{self._level()}/{self._root()._height()}'
         if parent := self._parent():
             index = parent.tabs.indexOf(self)
-            pre = f'{parent.tabs.tabText(index)!r}, '
-            index = f'{index=}, '
+            pre = f'{parent.tabs.tabText(index)!r}, {index=}, '
 
-        return (f'<{self.__class__.__name__}: {pre}'
-                f'level={level}, {index}'
+        return (f'<{self.__class__.__name__}: {pre}{level=}, '
                 f'depth={self._height()}>')
 
     def __getitem__(self, key):
