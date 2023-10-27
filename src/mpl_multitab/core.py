@@ -351,6 +351,10 @@ class TabManager(TabNode):
             yield self.tabs.widget(i)
 
     # ------------------------------------------------------------------------ #
+    def _is_uniform(self):
+        return len({tuple(_.keys()) for _ in self._children()}) == 1
+
+    # ------------------------------------------------------------------------ #
     def _current_index(self):
         return self.tabs.currentIndex() - self.index_offset
 
@@ -379,8 +383,10 @@ class TabManager(TabNode):
             yield node._resolve_index(key)
             node = node[key]
 
-    # def _tab_text(self, index):
-    #     return self.tabs.tabText(index + self.index_offset)
+    def _deresolve_indices(self, indices):
+        node = self
+        for i in indices:
+            yield i - (0 if node._is_leaf() else node.index_offset)
 
     def _index_offsets(self):
         node = self
@@ -480,12 +486,25 @@ class TabManager(TabNode):
     def _on_change(self, *indices):
         self.logger.debug('Tab change to {} (internal)', indices)
 
-        indices = tuple(map(op.sub, indices, self._index_offsets()))
+        indices = tuple(self._deresolve_indices(indices))
         self.logger.debug('Tab change to {} (user)', indices)
 
         # focus
         if self._link_focus:
             self.match_sibling_focus(*indices)
+
+            if self._depth() > 1:
+                top = self
+                for parent in self._ancestors():
+                    if parent._is_uniform():
+                        top = parent
+                    else:
+                        break
+
+                # If the UI is composed of tabs all having the same substructure,
+                # we co-focus the parent's siblings
+                top = top._active()
+                top.match_sibling_focus(*top._current_indices())
 
         # plot init for next active tab
         # i, *indices = indices
@@ -563,18 +582,19 @@ class TabManager(TabNode):
         # disonnect parent callbacks
         self.logger.debug('Unlinking focus at active toplevel.')
         root = self._root()
-        toplevel = root._active()
-        toplevel.unlink_focus()
+        top = root._active()
+        top.unlink_focus()
         root.set_focus(*current, None)
 
         # focus = (*current, i)
-        self.logger.debug('Callback setting {!r} siblings focus to: {}.',
-                          self, key)
+        # target = tuple(top._active()._current_indices())
+        self.logger.debug('Callback co-focussing {!r} siblings to: {}.',
+                          top, key)
         for mgr in self._siblings():
             mgr.set_focus(key, force_callback=False)
 
         self.logger.debug('Reconnecting focus matching at active toplevel.')
-        toplevel.link_focus()
+        top.link_focus()
 
     # ------------------------------------------------------------------------ #
     def _tab_text(self, indices):
@@ -803,19 +823,22 @@ class NestedTabsManager(TabManager):
             mgr.set_focus(*below, force_callback=force_callback)
 
     def match_sibling_focus(self, *indices):
+
+        self.logger.debug('Matching focus {!r}: {!r}', self, indices)
+
         # set focus of the new target group same as previous
         i, *new = indices
 
         target = self[i]
-        self.logger.debug('{!r} matching target manager {} focus with new: {}',
+        self.logger.debug('{!r} setting target manager {} focus to: {}',
                           self, i, new)
 
         # if list(target._current_indices()) != new:
-        target.set_focus(*new)
+        target.set_focus(*new, force_callback=False)
 
         #  also set focus of siblings
         # indices = i, *new
-        self.logger.debug('{!r} matching sibling managers focus to: {}',
+        self.logger.debug('{!r} setting sibling managers focus to: {}',
                           self, indices)
         h = self._height()
         for mgr in self._siblings():
@@ -843,7 +866,9 @@ class NestedTabsManager(TabManager):
             target = self[i]
         else:
             target = self._active()
-        target.unlink_focus(*indices)
+
+        if target:
+            target.unlink_focus(*indices)
 
     # def save(self, filenames=(), folder='', **kws):
     #     n = self.tabs.count()
