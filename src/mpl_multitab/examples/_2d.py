@@ -60,6 +60,36 @@ def example_delay_draw(n=10_000, colours=COLOURS, markers=MARKERS):
     return ui
 
 
+# def example_task():
+# 
+#     task = Task(colours, markers)
+# 
+#     # first create the figures, but don't do the plotting just yet
+#     ui = MplMultiTab(pos='W')
+#     for c, m in itt.product(colours, markers):
+#         ui.add_tab(f'Dataset {c.upper()}', f'Observation {m}')
+# 
+#     # create plotting function
+#     ui.add_callback(task)   # add your plot worker
+#     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
+#     ui.link_focus()         # keep same tab in focus across group switches
+#     return ui
+
+
+# class Task:
+#     def __init__(self, colours, markers):
+#         self.colours = colours
+#         self.markers = markers
+
+#     def __call__(self, fig, indices):
+#         print('Doing plot:', indices)
+#         i, j = indices
+#         ax = fig.subplots()
+#         return ax.scatter(*np.random.randn(2, n),
+#                           color=self.colours[i],
+#                           marker=f'${self.markers[j]}$')
+
+
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
     # ui = example_2d()

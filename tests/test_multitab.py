@@ -56,7 +56,7 @@ def generate_features(level):
         yield dict(zip(features.keys(), values))
 
 
-def generate_datasets(level, n=100):
+def generate_datasets(level, n=25):
     for kws in generate_features(level):
         yield kws, np.random.randn(2, n)
 
@@ -180,8 +180,12 @@ def test_delay_draw(qtbot, level, pos, screenshot=False):
 
 
 # if __name__ == '__main__':
+#     import sys
+#     from mpl_multitab import QtWidgets
+    
 #     app = QtWidgets.QApplication(sys.argv)
 #     # ui = example_nd()
 #     # ui = example_figures_predefined()
-#     ui = _make_ui(3, 'WNN')
+#     ui = _make_ui(3, 'NWN')
+#     ui.show()
 #     sys.exit(app.exec_())

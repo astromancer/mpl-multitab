@@ -387,7 +387,9 @@ class TabManager(TabNode):
     def _deresolve_indices(self, indices):
         node = self
         for i in indices:
-            yield i - (0 if node._is_leaf() else node.index_offset)
+            index = i - (0 if node._is_leaf() else node.index_offset)
+            yield index
+            node = node[index]
 
     def _index_offsets(self):
         node = self
@@ -485,14 +487,14 @@ class TabManager(TabNode):
             node.add_callback(func, *args, **kws)
 
     def _on_change(self, *indices):
-        self.logger.debug('Tab change to {} (internal)', indices)
+        self.logger.debug('{} Tab change to {} (internal)', self, indices)
 
         indices = tuple(self._deresolve_indices(indices))
-        self.logger.debug('Tab change to {} (user)', indices)
+        self.logger.debug('{} Tab change to {} (user)', self, indices)
 
         # focus
         if self._link_focus:
-            self.match_sibling_focus(*indices)
+            self.match_focus(*indices)
 
             if self._depth() > 1:
                 top = self
@@ -505,7 +507,8 @@ class TabManager(TabNode):
                 # If the UI is composed of tabs all having the same substructure,
                 # we co-focus the parent's siblings
                 top = top._active()
-                top.match_sibling_focus(*top._current_indices())
+                self.logger.debug('Co-focus inactive tabs at top level.')
+                top.match_focus(*top._current_indices())
 
         # plot init for next active tab
         # i, *indices = indices
@@ -572,7 +575,7 @@ class TabManager(TabNode):
         self.logger.debug('Focus linking turned off for {}.', self)
         self._link_focus = False
 
-    def match_sibling_focus(self, key):
+    def match_focus(self, key):
         """Match focus (active tabs) between siblings."""
 
         self.logger.debug('Matching focus {!r}: {!r}', self, key)
@@ -599,11 +602,10 @@ class TabManager(TabNode):
 
     # ------------------------------------------------------------------------ #
     def _tab_text(self, indices):
-
-        tabs = self
+        mgr = self
         for i in indices:
-            yield tabs.tabs.tabText(i + tabs.index_offset)
-            tabs = tabs[i]
+            yield mgr.tabs.tabText(i + mgr.index_offset)
+            mgr = mgr[i]
 
     def tab_text(self, indices):
         return tuple(self._tab_text(indices))
@@ -762,26 +764,28 @@ class NestedTabsManager(TabManager):
     # ------------------------------------------------------------------------ #
     def _on_change(self, index):
         # This will run *before* qt switches the tabs on mouse click
-        self.logger.debug('Tab change callback {}: index = {}.', self, index)
+        self.logger.debug('{} Tab change callback: index = {}.', self, index)
 
         upcoming = index - self.index_offset
 
         # disconnect callback from previously active tab
         if self._previous == -1:  # first change
-            self.logger.debug('First tab change at level {}.', self._level())
+            target = list(self[upcoming]._index_offsets())
+            self.logger.debug('First tab change at level {}: Init indices: {}.',
+                              self._level(), (index, *target))
             # current = [-1] * (h := self[upcoming]._height())
-            target = self[upcoming]._index_offsets()
+            # target =  [0] * self[upcoming]._height()
         else:
             # turn of the focus linking for inactive groups else infinite loop
             self.logger.debug('Remove focus linking for previously active tab.')
             previous = self.tabs.widget(self._previous)
             previous.unlink_focus()
-
             # current = list(previous._current_indices())
-            target = list(self[upcoming]._current_indices())
+            node = self[upcoming]
+            target = list(node.resolve_indices(*node._current_indices()))
 
         # target indices wrt to GUI tabs (including posible spacer at position 0)
-        new = (upcoming, *target)
+        # new = (index, *target)
         # old = (self._previous, *current)
 
         # self.logger.debug(f'{old = }, {new = }')
@@ -791,7 +795,7 @@ class NestedTabsManager(TabManager):
             #     self.logger.info('PING!!')
             #     indices += current
             # logger.debug(f'{indices = }')
-            super()._on_change(*new)
+            super()._on_change(index, *target)
 
         #
         self._previous = index
@@ -823,9 +827,14 @@ class NestedTabsManager(TabManager):
         for mgr in itr:
             mgr.set_focus(*below, force_callback=force_callback)
 
-    def match_sibling_focus(self, *indices):
+    def match_focus(self, *indices):
 
-        self.logger.debug('Matching focus {!r}: {!r}', self, indices)
+        self.logger.debug('{!r} matching focus: {}', self, indices)
+
+        if not self._is_uniform():
+            self.logger.debug('{!r} has non-uniform tab structure, focus will'
+                              ' not be matched between children.', self)
+            return
 
         # set focus of the new target group same as previous
         i, *new = indices
@@ -837,9 +846,9 @@ class NestedTabsManager(TabManager):
         # if list(target._current_indices()) != new:
         target.set_focus(*new, force_callback=False)
 
-        #  also set focus of siblings
-        # indices = i, *new
-        self.logger.debug('{!r} setting sibling managers focus to: {}',
+        # target will be in focus when UI callback returns
+        # set focus of siblings here
+        self.logger.debug('{!r} Co-focussing sibling managers to: {}',
                           self, indices)
         h = self._height()
         for mgr in self._siblings():
