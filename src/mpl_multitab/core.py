@@ -280,7 +280,7 @@ class TabManager(TabNode):
         super().__init__(parent)
         self.tabs = QtWidgets.QTabWidget(self)
         #
-        self._cid = None
+        self._connection = None
         self._link_focus = False
         self._previous = -1
         #
@@ -475,12 +475,12 @@ class TabManager(TabNode):
             return
 
         # Connect function
-        if self._cid:
+        if self._connection:
             self.logger.debug('A callback is already active. Not connecting.', self)
             return
 
         self.logger.debug('{} connecting tab change callback.', self)
-        self._cid = self.tabs.currentChanged.connect(self._on_change)
+        self._connection = self.tabs.currentChanged.connect(self._on_change)
 
         # propagate down
         for node in self.values():
@@ -543,7 +543,7 @@ class TabManager(TabNode):
     # ------------------------------------------------------------------------ #
     def set_focus(self, key, force_callback=True):
         self.logger.debug('Focus: {}. cid: {}, linking: {}',
-                          key, self._cid, self._link_focus)
+                          key, self._connection, self._link_focus)
         target = self._resolve_index(key)
         if self.tabs.currentIndex() == target:
             if force_callback:
@@ -553,7 +553,7 @@ class TabManager(TabNode):
             self.tabs.setCurrentIndex(target)
 
     def link_focus(self):
-        if self._cid:
+        if self._connection:
             if self._link_focus:
                 self.logger.debug('Focus matching already active on {}. Nothing to '
                                   'do here.', self)
@@ -563,11 +563,11 @@ class TabManager(TabNode):
             return
 
         self.logger.debug('{} adding tab change callback {}.')
-        self._cid = self.tabs.currentChanged.connect(self._on_change)
+        self._connection = self.tabs.currentChanged.connect(self._on_change)
         self._link_focus = True
 
     def unlink_focus(self):
-        if not (self._cid and self._link_focus):
+        if not (self._connection and self._link_focus):
             self.logger.debug('No focus matching active on {!r}. Nothing to do '
                               'here.', self)
             return
