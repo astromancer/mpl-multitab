@@ -10,7 +10,7 @@ from loguru import logger
 from matplotlib.figure import Figure
 
 # relative
-from .. import MplMultiTab, QtWidgets
+from mpl_multitab import MplMultiTab, QtWidgets
 
 
 # ---------------------------------------------------------------------------- #
