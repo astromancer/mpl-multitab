@@ -516,15 +516,13 @@ class TabManager(TabNode):
         # but *before* the tab is drawn.
         # NOTE: target `index`` wrt to GUI tabs (including posible spacer at
         # position 0).
-
         self.logger.debug('Tab change in {}: {} -> {} (internal).',
                           self, self._previous, index)
         # update previous
         self._previous = index
-        index = index - self._index0
 
         # run any if needed
-        return self.run_task(index)
+        return self.run_task(index - self._index0)
 
     def run_task(self, index):
         fig = self[index]
@@ -771,7 +769,7 @@ class NestedTabsManager(TabManager):
                           self, min(self._previous - self._index0, -1), indices)
 
         if not below:
-            if self._previous == -1:
+            if self._previous == -1 or not self._link_focus:
                 self.logger.debug('First tab change at level {}: Target: {}.',
                                   self._level(), upcoming)
                 target = self[upcoming]
@@ -783,11 +781,12 @@ class NestedTabsManager(TabManager):
 
                 below = list(target._current_indices())
             else:
-                # disconnect focus linking  callbacks from previously active tab
-                self.logger.debug('Filling missing indices from previously '
-                                  'active tab.')
+                # Filling missing indices
                 previous = self.tabs.widget(self._previous)
                 below = list((previous._current_indices()))
+
+                self.logger.debug('Filling missing indices from previously '
+                                  'active tab: {}.', below)
 
         indices = (upcoming, *below)
         # do plot if needed
