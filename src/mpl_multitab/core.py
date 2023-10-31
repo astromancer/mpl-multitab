@@ -471,7 +471,7 @@ class TabManager(TabNode):
 
         if focus:
             index = self.tabs.currentIndex() + 1
-            logger.debug('focussing on {}', index)
+            logger.debug('Focussing on {}', index)
             self.tabs.setCurrentIndex(index)
 
     def remove_tab(self, key):
@@ -480,7 +480,13 @@ class TabManager(TabNode):
     def replace_tab(self, key, fig, focus=False, **kws):
         index = self._resolve_index(key)
         name = self.tabs.tabText(key)
+
+        if self._connection:
+            self.tabs.currentChanged.disconnect()
         self.tabs.removeTab(index)
+        if self._connection:
+            self._connection = self.tabs.currentChanged.connect(self._on_change)
+
         tab = self.add_tab(name, index, fig=fig, focus=focus, **kws)
         self.tabs.setCurrentIndex(index)
         return tab
