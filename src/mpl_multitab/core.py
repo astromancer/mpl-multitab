@@ -6,7 +6,6 @@ tabbed window manager allowing easy navigation between many active figures.
 # std
 import sys
 import numbers
-import operator as op
 import itertools as itt
 import contextlib as ctx
 from pathlib import Path
@@ -37,17 +36,6 @@ TAB_POS = {
 }
 
 # ---------------------------------------------------------------------------- #
-
-
-def get_figure(ui=None, *keys, **kws):
-    if ui:
-        tab = ui.add_tab(*keys, fig=kws)
-        return tab.figure
-
-    if plt := sys.modules.get('matplotlib.pyplot'):
-        return plt.figure(**kws)
-
-    return Figure(**kws)
 
 
 def is_template_string(s):
@@ -87,14 +75,16 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
             pre = f'{parent.tabs.tabText(index)!r}, {index=}, '
 
         return (f'<{self.__class__.__name__}: {pre}{level=}, '
-                f'depth={self._height()}>')
+                f'height={self._height()}>')
+
+    __str__ = __repr__
 
     def __getitem__(self, key):
         if key is ...:
             return tuple(self.values())
 
         if key == '*':
-            return self._active()
+            return self._active_tab()
 
         if isinstance(key, tuple):
             # reduce
@@ -121,6 +111,9 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
 
     def values(self):
         yield from ()
+
+    def items(self):
+        yield from zip(self.keys(), self.values())
 
     # ------------------------------------------------------------------------ #
     def _children(self):
@@ -176,7 +169,7 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         yield from (x for x in self._descendants() if x._is_leaf())
 
     # ------------------------------------------------------------------------ #
-    def _active(self):
+    def _active_tab(self):
         return None
 
     def _inactive(self):
@@ -186,11 +179,11 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
         yield self
 
         node = self
-        while (node := node._active()):
+        while (node := node._active_tab()):
             yield node
 
     def _is_active(self):
-        return (parent._active() is self) if (parent := self._parent()) else True
+        return (parent._active_tab() is self) if (parent := self._parent()) else True
 
     # ------------------------------------------------------------------------ #
     def _current_indices(self):
@@ -210,6 +203,19 @@ class TabNode(QtWidgets.QWidget, LoggingMixin):
     def _index(self):
         # index of this node wrt root node
         return tuple(self._rindex())[::-1]
+
+    def _find(self, item):
+        return self.tabs.indexOf(item)
+
+
+class PlotTask:
+    def __init__(self, func, *args, **kws):
+        self.func = func
+        self.args = args
+        self.kws = kws
+
+    def __call__(self, figure, key, *args, **kws):
+        return self.func(figure, key, *self.args, *args, **{**self.kws, **kws})
 
 
 class MplTabbedFigure(TabNode):
@@ -238,18 +244,23 @@ class MplTabbedFigure(TabNode):
 
     def add_callback(self, func, *args, **kws):
         # connect plot callback
-        if not (func and callable(func)):
-            self.logger.debug('Invalid object for callback: {!r}', func)
+        if func and not callable(func):
+            self.logger.debug('Invalid object for callback: {!r}.', func)
             return
 
-        # add plot function
-        self.logger.debug('Adding plot method to {}: {}', self, func)
+        if func:
+            # add plot function
+            self.logger.debug('Adding plot method to {}: {}.', self, func)
+            # PlotTask(func)(*args, **kws)
+            self.plot = PlotTask(func, *args, **kws)
+        else:
+            self.logger.debug('No plot method to added since func = {}.', func)
 
-    def _plot(self):
+    def run_task(self):
 
         # self._root()._index(self)
         indices = list(self._index())
-        self.logger.debug('Checking if plot needed: {}', indices)
+        self.logger.debug('Checking if plot needed: {}.', indices)
 
         if self.figure.axes:
             self.logger.debug('Plot {} already initialized.', indices)
@@ -286,7 +297,7 @@ class TabManager(TabNode):
         self._link_focus = False
         self._previous = -1
         #
-        self.index_offset = 0
+        self._index0 = 0
         self.pos = pos.upper()
         self._layout(pos)
 
@@ -324,11 +335,11 @@ class TabManager(TabNode):
         self.tabs.addTab(space_tab, ' ')
         self.tabs.setTabEnabled(0, False)
         # tabs.setTabVisible(0, False)
-        self.index_offset = 1
+        self._index0 = 1
         return space_tab
 
     def __len__(self):
-        return self.tabs.count() - self.index_offset
+        return self.tabs.count() - self._index0
 
     def __getitem__(self, key):
         with ctx.suppress(NotImplementedError):
@@ -346,11 +357,11 @@ class TabManager(TabNode):
         self.tabs.removeTab(self._resolve_index(key))
 
     def keys(self):
-        for i in range(self.index_offset, self.tabs.count()):
+        for i in range(self._index0, self.tabs.count()):
             yield self.tabs.tabText(i)
 
     def values(self):
-        for i in range(self.index_offset, self.tabs.count()):
+        for i in range(self._index0, self.tabs.count()):
             yield self.tabs.widget(i)
 
     # ------------------------------------------------------------------------ #
@@ -359,16 +370,21 @@ class TabManager(TabNode):
 
     # ------------------------------------------------------------------------ #
     def _current_index(self):
-        return self.tabs.currentIndex() - self.index_offset
+        if (i := self.tabs.currentIndex() - self._index0) < 0:
+            return -1
+        return i
 
     def _resolve_index(self, key):
         if isinstance(key, str):
-            for i, trial in enumerate(self.keys(), self.index_offset):
+            for i, trial in enumerate(self.keys(), self._index0):
                 if key == trial:
                     return i
 
             raise KeyError(f'Could not resolve tab index {key!r}. '
                            f'Available tabs: {tuple(self.keys())}')
+
+        # if key is ...:
+        #     return self.tabs.currentIndex() if self._active_tab() else 0 + self._index0
 
         if not isinstance(key, numbers.Integral):
             raise TypeError(f'Invalid type object ({key}) for indexing {self!r}.')
@@ -378,7 +394,7 @@ class TabManager(TabNode):
             raise IndexError(f'Index {key} out of range for '
                              f'{self.__class__.__name__} with {n} tabs.')
 
-        return (key % n) + self.index_offset
+        return (key % n) + self._index0
 
     def resolve_indices(self, *keys):
         node = self
@@ -389,36 +405,36 @@ class TabManager(TabNode):
     def _deresolve_indices(self, indices):
         node = self
         for i in indices:
-            index = i - (0 if node._is_leaf() else node.index_offset)
+            index = i - (0 if node._is_leaf() else node._index0)
             yield index
             node = node[index]
 
     def _index_offsets(self):
         node = self
         while not node._is_leaf():
-            yield node.index_offset
+            yield node._index0
             node = next(node._children(), None)
 
     def _find(self, item):
-        if (i := self.tabs.indexOf(item)) != -1:
-            i -= self.index_offset
+        if (i := super()._find(item)) != -1:
+            return i - self._index0
         return i
 
     # ------------------------------------------------------------------------ #
-    def _active(self):
-        if self.tabs.currentIndex() < self.index_offset:
+    def _active_tab(self):
+        if self.tabs.currentIndex() < self._index0:
             return None
         return self.tabs.currentWidget()
 
     def _inactive(self):
-        return active._siblings() if (active := self._active()) else self.values()
+        return active._siblings() if (active := self._active_tab()) else self.values()
 
     # ------------------------------------------------------------------------ #
     def _factory(self, name, fig, **kws):
         # create tab name if needed
         if name is None:
             name = self._tab_name_template.format(
-                self.tabs.count() - self.index_offset + 1
+                self.tabs.count() - self._index0 + 1
             )
 
         # create figure if needed
@@ -473,7 +489,7 @@ class TabManager(TabNode):
     def add_callback(self, func=None, *args, **kws):
         # add plot callback for all children
         if func and not callable(func):
-            self.logger.debug('Invalid object for callback: {}', func)
+            self.logger.debug('Invalid object for callback: {}.', func)
             return
 
         # Connect function
@@ -488,77 +504,66 @@ class TabManager(TabNode):
         for node in self.values():
             node.add_callback(func, *args, **kws)
 
-    def _on_change(self, *indices):
-        # NOTE: target indices wrt to GUI tabs (including posible spacer at
-        # position 0)
+    # ------------------------------------------------------------------------ #
+    def _on_change(self, index):
+        # This will run *after* qt switches the tabs on mouse click internally,
+        # but *before* the tab is drawn.
+        # NOTE: target `index`` wrt to GUI tabs (including posible spacer at
+        # position 0).
 
-        self.logger.debug('Tab change in {}: {} -> {} (internal)',
-                          self, self._previous, indices)
+        self.logger.debug('Tab change in {}: {} -> {} (internal).',
+                          self, self._previous, index)
+        # update previous
+        self._previous = index
+        index = index - self._index0
 
-        indices = tuple(self._deresolve_indices(indices))
-        self.logger.debug('Tab change in {}: {} -> {} (user)',
-                          self, self._previous - self.index_offset, indices)
+        # run any if needed
+        return self.run_task(index)
 
-        # focus
-        if self._link_focus:
-            self.match_focus(*indices)
+    def run_task(self, index):
+        fig = self[index]
 
-            if self._depth() > 1:
-                top = self
-                for parent in self._ancestors():
-                    if parent._is_uniform():
-                        top = parent
-                    else:
-                        break
-
-                # If the UI is composed of tabs all having the same substructure,
-                # we co-focus the parent's siblings
-                if top is not self:
-                    top = top._active()
-                    self.logger.debug('Co-focus inactive tabs at top level.')
-                    top.match_focus(*top._current_indices())
-
-        # plot init for next active tab
-        fig = self[indices]
-        if msg := self._reason_cant_plot(fig):
+        should_plot, reason = self._should_plot(fig)
+        if not should_plot:
             # Nothing done
-            self.logger.debug('Plot task did not execute since: {}.', msg)
+            self.logger.debug('Plot task did not execute since: {}.', reason)
             return False
 
         #
-        names = self._root().tab_text((*self._index(), *indices))
-        self.logger.debug(
-            'Launching plot task for active tab at index {}.', names
-        )
+        names = self._root().tab_text((*self._index(), index))
+        self.logger.debug('Launching plot task for active tab: {}.', names)
 
-        fig._plot()
-
+        fig.run_task()
         if not fig._drawn:
             self.logger.debug('Drawing figure: {}.', names)
             fig.canvas.draw()
 
         return True
 
-    def _reason_cant_plot(self, fig):
+    def _should_plot(self, fig):
         self.logger.debug('Checking if plot task should run.')
 
-        if self not in self._root()._active_branch():
-            return 'Tab manager not in focus'
+        if not fig._is_leaf():
+            return False, 'Not a leaf node'
 
-        # if not fig._is_active():
-        #     return 'Figure not in focus'
+        if self not in self._root()._active_branch():
+            return False, f'{self} not in focus'
 
         if not fig.plot:
-            return 'No plot method'
+            return False, 'No plot method'
+
+        return True, None
 
     # ------------------------------------------------------------------------ #
-    def set_focus(self, key, force_callback=True):
-        self.logger.debug('Focus: {}. cid: {}, linking: {}',
-                          key, self._connection, self._link_focus)
+    def set_focus(self, key=..., force_callback=True):
+
+        self.logger.debug('Focus: {}. key = {}, link_focus = {}.',
+                          self, key,  self._link_focus)
         target = self._resolve_index(key)
         if self.tabs.currentIndex() == target:
             if force_callback:
-                # fire events even when tab changes to current
+                # fire events even when tab changes to current. May recur
+                # infinitey if a callback calls this function.
                 self._on_change(target)
         else:
             self.tabs.setCurrentIndex(target)
@@ -586,35 +591,11 @@ class TabManager(TabNode):
         self.logger.debug('Focus linking turned off for {}.', self)
         self._link_focus = False
 
-    def match_focus(self, key):
-        """Match focus (active tabs) between siblings."""
-
-        self.logger.debug('Matching focus {!r}: {!r}', self, key)
-
-        *current, _ = self._index()
-        # self.logger.debug('Current: {}. Target: {}', [*current, _])
-
-        # disonnect parent callbacks
-        self.logger.debug('Unlinking focus at active toplevel.')
-        root = self._root()
-        top = root._active()
-        top.unlink_focus()
-        root.set_focus(*current, None)
-
-        # focus = (*current, i)
-        # target = tuple(top._active()._current_indices())
-        self.logger.debug('Co-focussing {!r} siblings to: {}.', top, key)
-        for mgr in self._siblings():
-            mgr.set_focus(key, force_callback=False)
-
-        self.logger.debug('Reconnecting focus matching at active toplevel.')
-        top.link_focus()
-
     # ------------------------------------------------------------------------ #
     def _tab_text(self, indices):
         mgr = self
         for i in indices:
-            yield mgr.tabs.tabText(i + mgr.index_offset)
+            yield mgr.tabs.tabText(i + mgr._index0)
             mgr = mgr[i]
 
     def tab_text(self, indices):
@@ -672,7 +653,7 @@ class TabManager(TabNode):
             return filenames
 
         if is_template_string(filenames):
-            self.logger.debug('Saving {} figures with filename template: {!r}',
+            self.logger.debug('Saving {} figures with filename template: {!r}.',
                               n, filenames)
             filenames = filenames.format
 
@@ -683,6 +664,7 @@ class TabManager(TabNode):
         raise TypeError(f'Invalid filenames: {filenames!r}')
 
 
+# ---------------------------------------------------------------------------- #
 class NestedTabsManager(TabManager):
 
     _tab_name_template = 'Group {}'
@@ -735,7 +717,7 @@ class NestedTabsManager(TabManager):
         if (isinstance(obj, TabManager)
                 and (self.pos in 'EW')
                 and obj.pos == 'N'
-                and not self.index_offset):
+                and not self._index0):
             self._insert_spacer()
 
         super()._add_tab(name, obj, pos, focus)
@@ -751,7 +733,7 @@ class NestedTabsManager(TabManager):
         gid = str(gid)  # required by pyside
         if gid not in self:
             # new tab/group
-            focus = focus or (self.tabs.count() == self.index_offset)
+            focus = focus or (self.tabs.count() == self._index0)
             tab = super().add_tab(keys, **kws)
 
         # add to existing group
@@ -768,39 +750,57 @@ class NestedTabsManager(TabManager):
         super()._add_tab(name,
                          nested,
                          position,
-                         self.tabs.count() == self.index_offset)
+                         self.tabs.count() == self._index0)
         return nested
 
     # ------------------------------------------------------------------------ #
-    def _on_change(self, index):
-        # This will run *before* qt switches the tabs on mouse click
+    def _on_change(self, *indices):
         # NOTE: target indices wrt to GUI tabs (including posible spacer at
         # position 0)
+        self.logger.debug('Tab change in {}: {} -> {} (internal).',
+                          self, self._previous, indices)
+        # index
+        indices = upcoming, *below = tuple(self._deresolve_indices(indices))
+        self.logger.debug('Tab change in {}: {} -> {} (user).',
+                          self, min(self._previous - self._index0, -1), indices)
 
-        self.logger.debug('Tab change {} callback: index = {}.', self, index)
+        if not below:
+            if self._previous == -1:
+                self.logger.debug('First tab change at level {}: Target: {}.',
+                                  self._level(), upcoming)
+                target = self[upcoming]
+                #
+                if not target._active_tab():
+                    self.logger.debug('Initializing focus for upcoming manager '
+                                      'with unfocussed tabs.')
+                    target.set_focus(*([0] * target._height()))
 
-        # disconnect callback from previously active tab
-        upcoming = index - self.index_offset
-        if self._previous == -1:  # first change
-            target = list(self[upcoming]._index_offsets())
-            self.logger.debug('First tab change at level {}: Init indices: {}.',
-                              self._level(), target)
-            # if -1 in target:
-            #     raise ValueError('Invalid init index: {} for {}', target)
+                below = list(target._current_indices())
+            else:
+                # disconnect focus linking  callbacks from previously active tab
+                self.logger.debug('Filling missing indices from previously '
+                                  'active tab.')
+                previous = self.tabs.widget(self._previous)
+                below = list((previous._current_indices()))
 
-        else:
-            # turn of the focus linking for inactive groups else infinite loop
-            self.logger.debug('Remove focus linking for previously active tab.')
-            previous = self.tabs.widget(self._previous)
-            previous.unlink_focus()
-            node = self[upcoming]
-            target = list(node.resolve_indices(*node._current_indices()))
+        indices = (upcoming, *below)
+        # do plot if needed
+        self[indices].run_task()
 
-        if len(self):
-            super()._on_change(index, *target)
+        self._previous = upcoming + self._index0
+        # super()._on_change(index)        # this will update `self._previous`
 
-        #
-        self._previous = index
+        if not self._link_focus:
+            self.logger.debug('No focus linking for {}, callback returning', self)
+            return False
+
+        # match focus
+        self.match_focus(*indices)
+
+        # active focus linking for upcoming tab
+        self[upcoming].link_focus()
+
+        return True
 
     # ------------------------------------------------------------------------ #
     def set_focus(self, *indices, force_callback=True):
@@ -813,15 +813,23 @@ class NestedTabsManager(TabManager):
 
         # None can be used as sentinel to mean keep focus the same below
         if i is None:
+            self.logger.debug('Received sentinel at level {}. Stopping here.',
+                              self._level())
             return
 
-        self.logger.debug('{!r} focussing on {}', self, indices)
+        self.logger.debug('Focussing {!r} on {}.', self, indices)
 
         i = self._resolve_index(i)
-        self.tabs.setCurrentIndex(i)   # NOTE: will trigger _on_change
+        self.tabs.setCurrentIndex(i)   # NOTE: will trigger `_on_change`
         self._previous = i
 
-        if not self._link_focus and (active := self._active()):
+        target = self[i - self._index0]
+        if not below:  # len(below) < self._height():
+            below = [target._current_index() if target._active_tab() else 0]
+            self.logger.info('Filling missing indices for children of {}: {}.',
+                             self, below)
+
+        if not self._link_focus and (active := self._active_tab()):
             itr = [active]
         else:
             itr = self.values()
@@ -829,36 +837,47 @@ class NestedTabsManager(TabManager):
         for mgr in itr:
             mgr.set_focus(*below, force_callback=force_callback)
 
-    def match_focus(self, *indices):
+    def match_focus(self, *indices, force=False):
+        """
+        Run by `_on_change` when `_link_focus=True`
 
-        self.logger.debug('{!r} matching focus: {}', self, indices)
+        Parameters
+        ----------
+        indices: tuple[int]
+            Target indices. First gives is the target manager
+        force : bool, optional
+            _description_, by default False
 
-        if not self._is_uniform():
-            self.logger.debug('{!r} has non-uniform tab structure, focus will'
-                              ' not be matched between children.', self)
+        """
+
+        if not force and not self._is_uniform():
+            self.logger.debug('{!r} has non-uniform tab structure, focus will '
+                              'not be matched between children unless '
+                              '`force=True`.', self)
             return
 
+        self.logger.debug('Focus matching {}{!r}: {}.',
+                          'forced ' * force, self, indices)
+
         # set focus of the new target group same as previous
-        i, *new = indices
+        index, *below = indices
+        target = self[index]
 
-        target = self[i]
-        self.logger.debug('{!r} setting target manager {} focus to: {}',
-                          self, i, new)
-
-        # if list(target._current_indices()) != new:
-        target.set_focus(*new, force_callback=False)
+        if not below:
+            below = [target._current_index() if target._active_tab() else 0]
+            self.logger.info('Filling missing indices: {}.', below)
+            indices = index, *below
+        #
+        self.logger.debug('Setting target manager {} focus to: {}. linking: {}',
+                          target, below, target._link_focus)
+        target.set_focus(*below)
 
         # target will be in focus when UI callback returns
-        # set focus of siblings here
-        self.logger.debug('{!r} Co-focussing sibling managers to: {}',
-                          self, indices)
-        h = self._height()
-        for mgr in self._siblings():
-            if mgr._height() == h:
-                mgr.set_focus(*indices, force_callback=False)
+        # set focus of inactive tabs here
+        self.logger.debug('Co-focussing {!r} siblings to: {}.', self, indices)
 
-        # add focus linking callback to new group
-        target.link_focus()
+        for mgr in self._inactive():
+            mgr.set_focus(*below)
 
     def link_focus(self, *indices):
         super().link_focus()
@@ -866,7 +885,7 @@ class NestedTabsManager(TabManager):
             i, *indices = indices
             target = self[i]
         else:
-            target = self._active()
+            target = self._active_tab()
 
         if target:
             target.link_focus(*indices)
@@ -877,7 +896,7 @@ class NestedTabsManager(TabManager):
             i, *indices = indices
             target = self[i]
         else:
-            target = self._active()
+            target = self._active_tab()
 
         if target:
             target.unlink_focus(*indices)
@@ -952,9 +971,9 @@ class MplTabGUI(QtWidgets.QMainWindow, LoggingMixin):
     def show(self):
         # This is needed so the initial plot is done when launching the gui
         mgr = self.tabs
-        if len(mgr) and mgr._active() is None:
+        if len(mgr) and mgr._active_tab() is None:
             # an inactive tab is selected??
-            logger.debug('Focussing before show.')
+            logger.debug('Selecting first tab before launching UI.')
             mgr.set_focus(*([0] * mgr._height()))
         else:
             mgr._on_change(mgr.tabs.currentIndex())

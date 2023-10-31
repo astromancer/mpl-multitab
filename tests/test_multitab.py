@@ -89,7 +89,7 @@ def _change_tab(qtbot, mgr, i):
     bar = tabs.tabBar()
     with qtbot.waitSignal(tabs.currentChanged, timeout=1000):
         qtbot.mouseClick(bar, QtCore.Qt.LeftButton,
-                         pos=bar.tabRect(i + mgr.index_offset).center())
+                         pos=bar.tabRect(i + mgr._index0).center())
 
 
 def _test_cycle_tabs(qtbot, ui, check=lambda: ()):
