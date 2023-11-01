@@ -478,16 +478,21 @@ class TabManager(TabNode):
         return self.tabs.removeTab(self.tabs.indexOf(self._resolve_index(key)))
 
     def replace_tab(self, key, fig, focus=False, **kws):
+
         index = self._resolve_index(key)
         name = self.tabs.tabText(key)
 
-        if self._connection:
+        self.logger.debug('{!r} Replacing tab {!r} with {}.', self, name, fig)
+
+        if was_connected := bool(self._connection):
             self.tabs.currentChanged.disconnect()
+
         self.tabs.removeTab(index)
-        if self._connection:
+        tab = self.add_tab(name, index, fig=fig, focus=focus, **kws)
+
+        if was_connected:
             self._connection = self.tabs.currentChanged.connect(self._on_change)
 
-        tab = self.add_tab(name, index, fig=fig, focus=focus, **kws)
         self.tabs.setCurrentIndex(index)
         return tab
 
