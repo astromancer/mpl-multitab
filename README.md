@@ -156,7 +156,7 @@ def plot(fig, indices):
                       color=colours[i],
                       marker=f'${markers[j]}$')
 
-ui.add_callback(plot)   # add your plot worker
+ui.add_task(plot)   # add your plot worker
 ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
 ui.link_focus()         # keep same tab in focus across group switches
 ui.show()

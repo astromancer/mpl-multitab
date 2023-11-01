@@ -242,7 +242,7 @@ class MplTabbedFigure(TabNode):
         self._drawn = False
         self._connection_draw0 = None
 
-    def add_callback(self, func, *args, **kws):
+    def add_task(self, func, *args, **kws):
         # connect plot callback
         if func and not callable(func):
             self.logger.debug('Invalid object for callback: {!r}.', func)
@@ -250,17 +250,17 @@ class MplTabbedFigure(TabNode):
 
         if func:
             # add plot function
-            self.logger.debug('Adding plot method to {}: {}.', self, func)
+            self.logger.debug('Adding plot task to {}: {}.', self, func)
             # PlotTask(func)(*args, **kws)
             self.plot = PlotTask(func, *args, **kws)
         else:
-            self.logger.debug('No plot method to added since func = {}.', func)
+            self.logger.debug('No plot task to added since func = {}.', func)
 
     def run_task(self):
 
         # self._root()._index(self)
         indices = list(self._index())
-        self.logger.debug('Checking if plot needed: {}.', indices)
+        self.logger.debug('Checking if plot needed: {}, {}.', self, indices)
 
         if self.figure.axes:
             self.logger.debug('Plot {} already initialized.', indices)
@@ -492,7 +492,7 @@ class TabManager(TabNode):
         return tab
 
     # ------------------------------------------------------------------------ #
-    def add_callback(self, func=None, *args, **kws):
+    def add_task(self, func=None, *args, **kws):
         # add plot callback for all children
         if func and not callable(func):
             self.logger.debug('Invalid object for callback: {}.', func)
@@ -508,7 +508,7 @@ class TabManager(TabNode):
 
         # propagate down
         for node in self.values():
-            node.add_callback(func, *args, **kws)
+            node.add_task(func, *args, **kws)
 
     # ------------------------------------------------------------------------ #
     def _on_change(self, index):
@@ -699,7 +699,7 @@ class NestedTabsManager(TabManager):
             self.logger.debug('Detected figure initializer method {}. '
                               'Connecting group tab change callback to this '
                               'method.', self.plot)
-            self.add_callback(self, self.plot)
+            self.add_task(self, self.plot)
 
         if figures:
             self.link_focus()
@@ -945,12 +945,12 @@ class MplTabGUI(QtWidgets.QMainWindow, LoggingMixin):
         # Tab method aliases
         self.add_tab = self.tabs.add_tab
         self.set_focus = self.tabs.set_focus
-        self.add_callback = self.tabs.add_callback
+        self.add_task = self.tabs.add_task
 
         # Plotting callback
         if self.plot:
             self.logger.debug('Detected plot method. Adding callback.')
-            self.add_callback(self.plot)
+            self.add_task(self.plot)
 
     def __repr__(self):
         name = f'{self.__class__.__name__}: '

@@ -78,7 +78,7 @@ def example_delay_draw(n=10, colours=COLOURS, markers=MARKERS, hatch=HATCH):
                           s=750, marker=markers[j], hatch=hatch[k],
                           edgecolor=colours[i],  facecolor='none')
 
-    ui.add_callback(plot)   # add your plot worker
+    ui.add_task(plot)   # add your plot worker
     ui.set_focus(0, 0, 0)   # this will trigger the plotting for group 0 tab 0
     ui.link_focus()         # keep same tab in focus across group switches
     return ui

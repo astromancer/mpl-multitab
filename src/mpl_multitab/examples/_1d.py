@@ -43,7 +43,7 @@ def example_delay_draw(n=10_000, colours=COLOURS):
         ax = fig.subplots()
         return ax.scatter(*np.random.randn(2, n), color=colours[i])
 
-    ui.add_callback(plot)   # add your plot worker
+    ui.add_task(plot)   # add your plot worker
     ui.set_focus(0)         # this will trigger the plotting for group 0 tab 0
     return ui
 

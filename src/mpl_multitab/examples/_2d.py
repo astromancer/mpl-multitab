@@ -52,7 +52,7 @@ def example_delay_draw(n=10_000, colours=COLOURS, markers=MARKERS):
                           color=colours[i],
                           marker=f'${markers[j]}$')
 
-    ui.add_callback(plot)   # add your plot worker
+    ui.add_task(plot)   # add your plot worker
     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
     ui.link_focus()         # keep same tab in focus across group switches. This
     # makes sense if all groups have the same tabs, and we'd like to easily
@@ -70,7 +70,7 @@ def example_delay_draw(n=10_000, colours=COLOURS, markers=MARKERS):
 #         ui.add_tab(f'Dataset {c.upper()}', f'Observation {m}')
 # 
 #     # create plotting function
-#     ui.add_callback(task)   # add your plot worker
+#     ui.add_task(task)   # add your plot worker
 #     ui.set_focus(0, 0)      # this will trigger the plotting for group 0 tab 0
 #     ui.link_focus()         # keep same tab in focus across group switches
 #     return ui
