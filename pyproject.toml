@@ -51,7 +51,9 @@ envlist = py38
 [testenv]
 # install testing framework
 # ... or install anything else you might need here
-passenv = DISPLAY XAUTHORITY
+passenv = 
+    DISPLAY
+    XAUTHORITY
 deps = 
     -rrequirements.txt
     -rrequirements-dev.txt
