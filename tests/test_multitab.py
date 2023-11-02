@@ -154,7 +154,7 @@ def _make_ui(level, pos):
     for kws in generate_features(level):
         ui.add_tab(*kws.values())
 
-    ui.add_callback(_plot)        # add plot worker
+    ui.add_task(_plot)        # add plot worker
     ui.link_focus()               # keep same tab in focus across group switches
     ui.show()                     # this will trigger the first plot for [group 0, ...] tab 0
     return ui
